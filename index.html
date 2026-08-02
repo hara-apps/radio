@@ -26,9 +26,16 @@
   header { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 10px 12px 6px; }
   /* ПЕРЕКЛЮЧАТЕЛЬ РАЗДЕЛОВ. Показывается ТОЛЬКО когда есть что переключать: без
      podcasts.json одинокая вкладка «Радио» это шум, а не навигация. */
-  #tabs { display: none; gap: 6px; margin-bottom: 8px; }
+  /* ЧЕТЫРЕ РАЗДЕЛА В ОДНУ СТРОКУ. Замер в браузере на 320px (iPhone SE) и 390px в двух
+     языках: с эмодзи подписи «Подкасты» и «Музыка» обрезаются и страница едет вбок,
+     ТОЛЬКО СЛОВАМИ - влезает всё и шапка ниже на 14px. Эмодзи остались на чипах
+     фильтров и на кнопках бота, там места хватает. */
+  #tabs { display: none; gap: 4px; margin-bottom: 8px; }
   #tabs.on { display: flex; }
-  #tabs .chip { flex: 1 1 0; text-align: center; }
+  #tabs .chip {
+    flex: 1 1 0; text-align: center; padding: 7px 4px; font-size: 13px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   #q {
     width: 100%; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--line);
     background: var(--card); color: var(--fg); font-size: 16px;  /* 16px = iOS не зумит */
@@ -178,7 +185,20 @@ var TG = (window.Telegram && window.Telegram.WebApp) || null;
 /* ─── ЯЗЫК. Пин языка живёт в боте, но сюда он не доезжает: роутер startapp не передаёт
    ничего, кроме имени аппки, а передеплой роутера - чужая дорожка. Берём язык клиента:
    для страницы из двух десятков строк этого достаточно. */
+/* ПАРАМЕТРЫ ССЫЛКИ. Бот открывает страницу кнопкой web_app с ПОЛНЫМ адресом, поэтому
+   сюда доезжает всё, что он захотел сказать: какой экран открыть, на каком языке, какие
+   станции показать. Через роутер startapp этого было не выразить - он проносит только
+   имя аппки. */
+var Q = (function () {
+  try { return new URLSearchParams(location.search); } catch (e) { return null; }
+})();
+function qp(name) { try { return (Q && Q.get(name)) || ''; } catch (e) { return ''; } }
+
+/* ЯЗЫК: ПИН БОТА ГЛАВНЕЕ ЯЗЫКА КЛИЕНТА. Человек мог выбрать язык в боте явно, и страница,
+   спорящая с этим выбором, выглядит поломкой. Нет пина - берём язык клиента, как раньше. */
 var LANG = (function () {
+  var p = qp('lang').slice(0, 2).toLowerCase();
+  if (p === 'ru' || p === 'en') return p;
   var c = '';
   try { c = (TG && TG.initDataUnsafe && TG.initDataUnsafe.user || {}).language_code || ''; } catch (e) {}
   c = (c || navigator.language || 'ru').slice(0, 2).toLowerCase();
@@ -232,7 +252,34 @@ var STR = {
   p_built:   { ru: 'Каталог собран {d}. Живой поиск по всему каталогу идёт в чате у Гробовщика.',
                en: 'Catalog built {d}. Live search over the whole catalog is in the chat ' +
                    'with the Undertaker.' },
-  ms_pod:    { ru: 'Подкаст · Гробовщик',       en: 'Podcast · The Undertaker' }
+  ms_pod:    { ru: 'Подкаст · Гробовщик',       en: 'Podcast · The Undertaker' },
+  /* ── МУЗЫКА И КНИГИ ── */
+  tab_music: { ru: 'Музыка',                    en: 'Music' },
+  tab_book:  { ru: 'Книги',                     en: 'Books' },
+  tab_radio2: { ru: 'Радио',                    en: 'Radio' },
+  tab_pod2:  { ru: 'Подкасты',                  en: 'Podcasts' },
+  m_search:  { ru: 'Поиск трека в подборке',    en: 'Search the selection' },
+  b_search:  { ru: 'Поиск книги в каталоге',    en: 'Search the catalog' },
+  m_empty_h: { ru: 'Треков не нашлось',         en: 'No tracks found' },
+  m_empty_b: { ru: 'Попробуй другой жанр. Поиск по всей библиотеке идёт в чате.',
+               en: 'Try another genre. Search over the whole library is in the chat.' },
+  b_empty_h: { ru: 'Книг не нашлось',           en: 'No books found' },
+  b_empty_b: { ru: 'Попробуй другую тему или автора.',
+               en: 'Try another topic or author.' },
+  m_built:   { ru: 'Подборка собрана {d}. Живой поиск по всей библиотеке идёт в чате.',
+               en: 'Selection built {d}. Live search over the whole library is in the chat.' },
+  b_chapters_1: { ru: 'глава',                  en: 'chapter' },
+  b_chapters_2: { ru: 'главы',                  en: 'chapters' },
+  b_chapters_5: { ru: 'глав',                   en: 'chapters' },
+  b_back:    { ru: 'Назад к книгам',            en: 'Back to books' },
+  ms_music:  { ru: 'Музыка · Гробовщик',        en: 'Music · The Undertaker' },
+  ms_book:   { ru: 'Аудиокнига · Гробовщик',    en: 'Audiobook · The Undertaker' },
+  /* Атрибуция обязательна там, где лицензия её требует (CC). Строка короткая и стоит
+     под именем трека - она часть условия, на котором нам этот файл разрешили. */
+  lic:       { ru: 'лицензия: {l}',             en: 'licence: {l}' },
+  fav_h:     { ru: 'Избранное не открылось',    en: 'Favourites did not open' },
+  fav_b:     { ru: 'Каталог не отдал эти станции. Открой список в чате.',
+               en: 'The catalog did not return these stations. Open the list in the chat.' }
 };
 function t(k) { return (STR[k] || {})[LANG] || (STR[k] || {}).ru || ''; }
 
@@ -257,7 +304,25 @@ var LIMIT = 40;
 var LS_LAST = 'hara_radio_last';
 var LS_VOL = 'hara_radio_vol';
 var LS_POS = 'hara_pod_pos';        /* докуда дослушан выпуск: час звука за один заход не слушают */
-var POD_FILE = 'podcasts.json';     /* снимок каталога, кладёт deploy_radio рядом со страницей */
+/* СНИМКИ КАТАЛОГОВ. Секрет в статическую страницу не положить (у PodcastIndex каждый
+   запрос подписан ключом), а книги и музыка лежат за CORS чужих хостов - поэтому все три
+   каталога собирает бот при выкладке и кладёт файлами рядом. Реестр один: новый раздел
+   это строка, а не ещё один почти такой же кусок кода.
+   kind='cat' - два уровня (шоу -> выпуски), kind='flat' - один (трек играет сразу). */
+var SECTIONS = [
+  { id: 'radio', tab: 'tab_radio2', kind: 'live' },
+  { id: 'pod',   tab: 'tab_pod2',   kind: 'cat',  file: 'podcasts.json',
+    ph: 'search', artist: 'ms_pod',  back: 'p_back', units: ['p_eps_1', 'p_eps_2', 'p_eps_5'] },
+  { id: 'music', tab: 'tab_music',  kind: 'flat', file: 'music.json',
+    ph: 'm_search', artist: 'ms_music' },
+  { id: 'book',  tab: 'tab_book',   kind: 'cat',  file: 'books.json',
+    ph: 'b_search', artist: 'ms_book', back: 'b_back',
+    units: ['b_chapters_1', 'b_chapters_2', 'b_chapters_5'] }
+];
+function section(id) {
+  for (var i = 0; i < SECTIONS.length; i++) { if (SECTIONS[i].id === id) return SECTIONS[i]; }
+  return SECTIONS[0];
+}
 
 var $ = function (id) { return document.getElementById(id); };
 var elList = $('list'), elNote = $('note'), elBar = $('bar'), elPlay = $('play');
@@ -270,7 +335,7 @@ var audio = $('a');
 
 var state = { mode: 'radio', filter: 'ru', q: '', items: [], cur: null, seq: 0,
               ptopic: '', pshow: null };
-var POD = null;                     /* снимок каталога подкастов; null = его нет, вкладки тоже */
+var DATA = {};                      /* id раздела -> снимок; нет снимка = нет и вкладки */
 
 /* ═══ ТЕМА TELEGRAM ═══ */
 function applyTheme() {
@@ -321,67 +386,148 @@ function mmss(sec) {
   return h ? (h + ':' + p(m) + ':' + p(s)) : (m + ':' + p(s));
 }
 
-function epsWord(n) {
-  if (LANG !== 'ru') return n + ' ' + t(n === 1 ? 'p_eps_1' : 'p_eps_5');
+function epsWord(n, units) {
+  /* СКЛОНЕНИЕ ПО ФОРМАМ РАЗДЕЛА: у подкастов выпуски, у книг главы. Формы лежат в
+     реестре строк (три у русского, две у английского), а не собираются условием. */
+  units = units || ['p_eps_1', 'p_eps_2', 'p_eps_5'];
+  if (LANG !== 'ru') return n + ' ' + t(n === 1 ? units[0] : units[2]);
   var a = n % 100, b = n % 10;
-  if (a >= 11 && a <= 14) return n + ' ' + t('p_eps_5');       /* 11-14 всегда «выпусков» */
-  if (b === 1) return n + ' ' + t('p_eps_1');
-  if (b >= 2 && b <= 4) return n + ' ' + t('p_eps_2');
-  return n + ' ' + t('p_eps_5');
+  if (a >= 11 && a <= 14) return n + ' ' + t(units[2]);        /* 11-14 всегда мн. число */
+  if (b === 1) return n + ' ' + t(units[0]);
+  if (b >= 2 && b <= 4) return n + ' ' + t(units[1]);
+  return n + ' ' + t(units[2]);
 }
 
-function epItem(sh, ep) {
+function epItem(sh, ep, sec) {
   /* ВЫПУСК В ТОЙ ЖЕ ФОРМЕ, ЧТО И СТАНЦИЯ: плеер, обложка, локскрин и мини-бар не должны
      знать, что играет. Иначе каждая новая мелочь чинилась бы дважды. */
-  return { id: 'p' + ep.id, name: ep.title, url: ep.url, icon: sh.image || '',
-           artist: sh.title, pod: true, sec: ep.sec || 0,
+  return { id: (sec ? sec.id : 'p') + ':' + sh.id + ':' + ep.id, name: ep.title, url: ep.url,
+           icon: sh.image || '', artist: sh.title, pod: true, sec: ep.sec || 0,
            sub: [ep.sec ? mmss(ep.sec) : '', sh.title].filter(Boolean).join(' · ') };
 }
 
-function loadPodCatalog() {
-  /* Один запрос на старте. Нет файла - НЕТ И ВКЛАДКИ: пустой раздел «Подкасты», который
-     ничего не открывает, хуже отсутствующего (то же правило, что у кнопки плеера в боте,
-     которой нет без настроенной мини-аппки). */
-  /* ХЭШ В АДРЕСЕ ДАННЫХ, А НЕ ТОЛЬКО no-cache: страница и её данные обновляются ОДНИМ
-     деплоем, и закэшированный podcasts.json рядом со свежей страницей это тот же
-     «изменений не видно», только тише - каталог молча остаётся прошлым. */
-  return fetch(POD_FILE + '?v=' + encodeURIComponent(VERSION), { cache: 'no-cache' })
-    .then(function (r) { return r.ok ? r.json() : null; })
-    .then(function (j) {
-      if (!j || !j.shows || !j.shows.length) return;
-      POD = j;
-      paintTabs();
-    })
-    .catch(function () { /* нет файла - работаем радио, молча и без обещаний */ });
+function trackItem(tr) {
+  /* ТРЕК ИГРАЕТ СРАЗУ: второго уровня у него нет, и выдумывать его ради единообразия
+     значит заставить человека тапать дважды там, где хватает одного.
+     АТРИБУЦИЯ СТОИТ В ПОДПИСИ, а не «где-нибудь»: у части источников это условие
+     лицензии, на котором нам файл и разрешили. */
+  return { id: 'm:' + tr.id, name: tr.title, url: tr.url, icon: '', artist: tr.artist,
+           pod: true, sec: tr.sec || 0,
+           sub: [tr.sec ? mmss(tr.sec) : '', tr.artist,
+                 tr.license ? t('lic').replace('{l}', tr.license) : ''].filter(Boolean).join(' · ') };
 }
 
-function loadPod() {
-  /* Сети тут нет вовсе: снимок уже в памяти. Два уровня - шоу и выпуски выбранного шоу. */
-  if (state.pshow) {
-    var eps = (state.pshow.eps || []).map(function (e) { return epItem(state.pshow, e); });
-    /* ВОЗВРАТ ПЕРВОЙ СТРОКОЙ СПИСКА, а не кнопкой «назад» где-то ещё: список длинный,
-       и уводить палец наверх ради выхода из шоу неудобно ровно там, где выходят чаще. */
-    eps.unshift({ id: 'back', name: '⬅ ' + t('p_back'), sub: '', icon: '',
+function loadSnapshots() {
+  /* Один запрос на раздел, на старте. НЕТ ФАЙЛА - НЕТ И ВКЛАДКИ: раздел, который
+     открывается в пустоту, хуже отсутствующего (то же правило, что у кнопки плеера в
+     боте, которой нет без выложенной страницы).
+     ХЭШ В АДРЕСЕ, А НЕ ТОЛЬКО no-cache: страница и её данные обновляются ОДНИМ деплоем,
+     и закэшированный каталог рядом со свежей страницей это тот же «изменений не видно»,
+     только тише. Разделы независимы: упавший каталог книг не уносит подкасты. */
+  var jobs = SECTIONS.filter(function (s) { return s.file; }).map(function (sec) {
+    return fetch(sec.file + '?v=' + encodeURIComponent(VERSION), { cache: 'no-cache' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (!j) return;
+        var rows = sec.kind === 'flat' ? j.tracks : j.shows;
+        if (!rows || !rows.length) return;
+        DATA[sec.id] = j;
+      })
+      .catch(function () { /* нет файла - раздела просто не будет */ });
+  });
+  return Promise.all(jobs).then(function () {
+    paintTabs();
+    /* ЭКРАН ИЗ ССЫЛКИ ОТКРЫВАЕТСЯ ПОСЛЕ ЗАГРУЗКИ КАТАЛОГОВ, а не до: до неё вкладки ещё
+       нет, и переключаться было бы некуда. */
+    openScreen(qp('screen'));
+  });
+}
+
+/* ═══ ЭКРАН ИЗ ССЫЛКИ (B3) ═══════════════════════════════════════════════════════════
+   Бот открывает страницу кнопкой web_app с полным адресом и говорит, что показать.
+   screen=favorites несёт ещё и список станций: обратного канала у аппки нет (sendData
+   работает только у reply-кнопки), поэтому избранное приезжает В АДРЕСЕ. */
+function openScreen(scr) {
+  scr = (scr || '').toLowerCase();
+  if (!scr || scr === 'radio') return;
+  if (scr === 'favorites') { showFav(qp('fav')); return; }
+  var sec = null, i;
+  for (i = 0; i < SECTIONS.length; i++) {
+    /* имена вкладок в ссылке человеческие (podcasts/books/music), внутри короткие */
+    if (SECTIONS[i].id === scr || SECTIONS[i].file === scr + '.json') { sec = SECTIONS[i]; break; }
+  }
+  if (!sec || !DATA[sec.id]) return;      /* каталога нет - молча остаёмся на радио */
+  switchTo(sec.id);
+}
+
+function showFav(list) {
+  /* Станции приезжают списком uuid, а не целиком: адрес кнопки не резиновый. Разворачиваем
+     их через тот же каталог, которым пользуется весь раздел. */
+  var ids = (list || '').split(',').filter(Boolean).slice(0, 40);
+  if (!ids.length) return;
+  state.mode = 'radio'; state.q = ''; state.pshow = null;
+  paintTabs(); paintChips();
+  var my = ++state.seq;
+  showNote(t('loading'));
+  fetch(API + '/json/stations/byuuid?uuids=' + encodeURIComponent(ids.join(',')))
+    .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function (rows) {
+      if (my !== state.seq) return;
+      var out = [], i, st;
+      for (i = 0; i < rows.length; i++) { st = stationOf(rows[i]); if (st && st.id) out.push(st); }
+      if (!out.length) { showNote(t('fav_h'), t('fav_b')); return; }
+      state.items = out;
+      render();
+    })
+    .catch(function () {
+      if (my !== state.seq) return;
+      showNote(t('fav_h'), t('fav_b'));
+    });
+}
+
+function loadSection() {
+  /* ОДИН ЗАГРУЗЧИК НА ВСЕ СНИМКИ. Разделов уже три (подкасты, музыка, книги), и три копии
+     «отфильтровать по теме, отфильтровать по поиску, отрисовать» разошлись бы на первой
+     же правке. Сети тут нет вовсе: снимок уже в памяти. */
+  var sec = section(state.mode), snap = DATA[sec.id];
+  if (!snap) { state.items = []; render(); return; }
+  var q = state.q.toLowerCase();
+
+  if (sec.kind === 'flat') {                       /* музыка: трек играет сразу */
+    state.items = (snap.tracks || []).filter(function (tr) {
+      if (state.ptopic && tr.topic !== state.ptopic) return false;
+      if (!q) return true;
+      return (tr.title + ' ' + (tr.artist || '')).toLowerCase().indexOf(q) >= 0;
+    }).map(trackItem);
+    render();
+    return;
+  }
+
+  if (state.pshow) {                               /* внутри шоу/книги: выпуски или главы */
+    var eps = (state.pshow.eps || []).map(function (e) { return epItem(state.pshow, e, sec); });
+    /* ВОЗВРАТ ПЕРВОЙ СТРОКОЙ СПИСКА, а не кнопкой где-то ещё: список длинный, и уводить
+       палец наверх ради выхода неудобно ровно там, где выходят чаще всего. */
+    eps.unshift({ id: 'back', name: '⬅ ' + t(sec.back || 'p_back'), sub: '', icon: '',
                   tap: function () { state.pshow = null; load(); } });
     state.items = eps;
     render();
     return;
   }
-  var q = state.q.toLowerCase();
-  state.items = POD.shows.filter(function (sh) {
+  state.items = (snap.shows || []).filter(function (sh) {
     if (state.ptopic && sh.topic !== state.ptopic) return false;
     if (!q) return true;
     return (sh.title + ' ' + (sh.author || '')).toLowerCase().indexOf(q) >= 0;
   }).map(function (sh) {
     return { id: 's' + sh.id, name: sh.title, icon: sh.image || '',
-             sub: [sh.author, epsWord((sh.eps || []).length)].filter(Boolean).join(' · '),
+             sub: [sh.author, epsWord((sh.eps || []).length, sec.units)]
+               .filter(Boolean).join(' · '),
              tap: function () { state.pshow = sh; load(); } };
   });
   render();
 }
 
 function load() {
-  if (state.mode === 'pod') { loadPod(); return; }
+  if (state.mode !== 'radio') { loadSection(); return; }
   var my = ++state.seq;                       /* гонка: отвечает только последний запрос */
   showNote(t('loading'));
   var p = new URLSearchParams({ limit: String(LIMIT * 4), hidebroken: 'true',
@@ -465,8 +611,10 @@ function render() {
   if (!state.items.length) {
     /* пусто после https-фильтра и пусто в каталоге - разные вещи, и человеку нужны
        разные слова: в первом случае станции есть, просто не для этой страницы */
-    var pod = state.mode === 'pod';
-    showNote(t(pod ? 'p_empty_h' : 'empty_h'), t(pod ? 'p_empty_b' : 'empty_b'));
+    var _e = { radio: ['empty_h', 'empty_b'], pod: ['p_empty_h', 'p_empty_b'],
+               music: ['m_empty_h', 'm_empty_b'], book: ['b_empty_h', 'b_empty_b'] };
+    var _k = _e[state.mode] || _e.radio;
+    showNote(t(_k[0]), t(_k[1]));
     return;
   }
   var frag = document.createDocumentFragment();
@@ -494,13 +642,18 @@ function render() {
   /* подпись под списком идёт ТИХО: это уточнение, а не сообщение о беде */
   var hint = document.createElement('div');
   hint.className = 'foot';
-  if (state.mode === 'pod') {
-    var d = '';
-    try { d = new Date((POD.built || 0) * 1000).toLocaleDateString(LANG === 'ru' ? 'ru-RU' : 'en-GB'); }
-    catch (e) { d = ''; }
-    hint.textContent = d ? t('p_built').replace('{d}', d) : '';
-  } else {
+  if (state.mode === 'radio') {
     hint.textContent = t('https_h') + '. ' + t('https_b');
+  } else {
+    /* ДАТА СБОРКИ НАЗЫВАЕТСЯ ВСЛУХ: каталог тут снимок, и человек должен понимать,
+       насколько он свежий, а не догадываться. Живой поиск честно отправлен в чат. */
+    var _snap = DATA[state.mode] || {}, d = '';
+    try {
+      d = _snap.built ? new Date(_snap.built * 1000).toLocaleDateString(
+        LANG === 'ru' ? 'ru-RU' : 'en-GB') : '';
+    } catch (e) { d = ''; }
+    hint.textContent = d ? t(state.mode === 'music' ? 'm_built' : 'p_built')
+      .replace('{d}', d) : '';
   }
   if (hint.textContent) elList.appendChild(hint);
 }
@@ -532,8 +685,9 @@ function mediaMeta(st) {
       title: (st && st.name) || 'Radio',
       /* у выпуска исполнитель это ШОУ, у станции - мы: на локскрине человек должен
          видеть, что именно играет, а не одинаковую строку на любой звук */
-      artist: (st && st.artist) || t('ms_artist'),
-      album: (st && st.pod) ? t('ms_pod') : ((st && st.country) || ''),
+      artist: (st && st.artist) || t(section(state.mode).artist || 'ms_artist'),
+      album: (st && st.pod) ? t(section(state.mode).artist || 'ms_pod')
+                            : ((st && st.country) || ''),
       artwork: art
     });
     return true;
@@ -736,21 +890,26 @@ audio.addEventListener('ended', function () {
 window.addEventListener('pagehide', savePos);
 
 /* ═══ ВКЛАДКИ, ФИЛЬТРЫ И ПОИСК ═══ */
+function switchTo(id) {
+  if (state.mode === id) return;
+  state.mode = id; state.q = ''; elQ.value = ''; state.pshow = null; state.ptopic = '';
+  paintTabs(); paintChips();
+  load();
+}
+
 function paintTabs() {
+  /* Вкладка есть ТОЛЬКО у раздела, чей каталог доехал: раздел, открывающийся в пустоту,
+     хуже отсутствующего. Одна вкладка - переключать нечего, строку не показываем вовсе. */
   var box = $('tabs');
   box.innerHTML = '';
-  if (!POD) { box.className = ''; return; }    /* каталога нет - вкладок тоже, см. loadPodCatalog */
+  var live = SECTIONS.filter(function (sec) { return sec.kind === 'live' || DATA[sec.id]; });
+  if (live.length < 2) { box.className = ''; return; }
   box.className = 'on';
-  [['radio', 'tab_radio'], ['pod', 'tab_pod']].forEach(function (pair) {
+  live.forEach(function (sec) {
     var c = document.createElement('button');
-    c.type = 'button'; c.className = 'chip'; c.textContent = t(pair[1]);
-    c.setAttribute('aria-pressed', state.mode === pair[0] ? 'true' : 'false');
-    c.addEventListener('click', function () {
-      if (state.mode === pair[0]) return;
-      state.mode = pair[0]; state.q = ''; elQ.value = ''; state.pshow = null;
-      paintTabs(); paintChips();
-      load();
-    });
+    c.type = 'button'; c.className = 'chip'; c.textContent = t(sec.tab);
+    c.setAttribute('aria-pressed', state.mode === sec.id ? 'true' : 'false');
+    c.addEventListener('click', function () { switchTo(sec.id); });
     box.appendChild(c);
   });
 }
@@ -760,21 +919,23 @@ function paintChips() {
      целиком проще синхронизации двух наборов - и не оставляет чужого нажатым. */
   var box = $('chips');
   box.innerHTML = '';
-  elQ.placeholder = t(state.mode === 'pod' ? 'p_search' : 'search');
+  var sec = section(state.mode);
+  elQ.placeholder = t(sec.ph || 'search');
   var list;
-  if (state.mode === 'pod') {
-    list = [{ id: '', ru: t('p_all'), en: t('p_all') }].concat(POD ? POD.topics : []);
-  } else {
+  if (sec.kind === 'live') {
     list = FILTERS;
+  } else {
+    list = [{ id: '', ru: t('p_all'), en: t('p_all') }].concat(
+      (DATA[sec.id] || {}).topics || []);
   }
   list.forEach(function (f) {
-    var cur = state.mode === 'pod' ? state.ptopic : state.filter;
+    var cur = sec.kind === 'live' ? state.filter : state.ptopic;
     var c = document.createElement('button');
     c.type = 'button'; c.className = 'chip'; c.textContent = f[LANG] || f.ru;
     c.setAttribute('aria-pressed', f.id === cur ? 'true' : 'false');
     c.addEventListener('click', function () {
-      if (state.mode === 'pod') { state.ptopic = f.id; state.pshow = null; }
-      else { state.filter = f.id; }
+      if (sec.kind === 'live') { state.filter = f.id; }
+      else { state.ptopic = f.id; state.pshow = null; }
       state.q = ''; elQ.value = '';
       var all = box.querySelectorAll('.chip'), i;
       for (i = 0; i < all.length; i++) all[i].setAttribute('aria-pressed', 'false');
@@ -792,7 +953,7 @@ elQ.addEventListener('input', function () {
     var v = elQ.value.trim();
     if (v === state.q) return;
     state.q = v;
-    if (state.mode === 'pod') state.pshow = null;   /* ищем по шоу, а не внутри открытого */
+    if (state.mode !== 'radio') state.pshow = null;  /* ищем по шоу, а не внутри открытого */
     if (v) {
       /* идёт поиск - ни один фильтр не активен, и вид не должен утверждать обратное */
       var all = $('chips').querySelectorAll('.chip'), i;
@@ -810,7 +971,7 @@ elQ.addEventListener('input', function () {
    и перезагружаемся ОДИН раз при расхождении.
    Защита от цикла обязательна: если version.txt почему-то всегда отличается (не доложили
    при деплое, отдаётся не тот файл), без флага страница перезагружалась бы вечно. */
-var VERSION = '1b13a1fc676d';
+var VERSION = '12fbffbdf1b3';
 
 (function checkVersion() {
   if (VERSION.indexOf('{{') === 0) return;          /* не задеплоено - сверять не с чем */
@@ -860,9 +1021,10 @@ document.documentElement.lang = LANG;
 paintTabs();
 paintChips();
 load();
-/* каталог подкастов подтягивается ФОНОМ: радио обязано открыться сразу, а вкладка
-   появится, когда файл доедет (или не появится вовсе, если его нет) */
-loadPodCatalog();
+/* каталоги подтягиваются ФОНОМ: радио обязано открыться сразу, а вкладки появятся, когда
+   файлы доедут (или не появятся вовсе, если их нет). Экран из ссылки открывается там же,
+   после загрузки - до неё переключаться было бы некуда. */
+loadSnapshots();
 })();
 </script>
 </body>
