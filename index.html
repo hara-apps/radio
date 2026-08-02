@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Радио · Гробовщик</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  /* Цвета приезжают из Telegram (themeParams) и подставляются в эти переменные. Здесь
+     дефолт на случай, если SDK не загрузился: тёмный, как основная тема клиента. */
+  :root {
+    color-scheme: dark;
+    --bg: #17212b; --fg: #f5f5f5; --hint: #8a9aa9; --card: #1d2733;
+    --line: #26313d; --accent: #5eb5f7; --accent-fg: #ffffff; --danger: #e86a6a;
+    --safe-b: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column;
+    /* место под плеер: он приклеен снизу и не должен накрывать последнюю станцию */
+    padding-bottom: calc(92px + var(--safe-b));
+  }
+  header { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 10px 12px 6px; }
+  #q {
+    width: 100%; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--card); color: var(--fg); font-size: 16px;  /* 16px = iOS не зумит */
+  }
+  #q::placeholder { color: var(--hint); }
+  .chips { display: flex; gap: 6px; overflow-x: auto; padding: 8px 12px 4px; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip {
+    flex: 0 0 auto; padding: 7px 13px; border-radius: 999px; background: var(--card);
+    color: var(--fg); border: 1px solid var(--line); font-size: 14px; cursor: pointer;
+    user-select: none; min-height: 34px;
+  }
+  .chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+  main { flex: 1 1 auto; padding: 4px 12px 12px; }
+  .row {
+    display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+    padding: 12px 10px; margin-bottom: 6px; border-radius: 10px; cursor: pointer;
+    background: var(--card); border: 1px solid transparent; color: var(--fg);
+    font: inherit; min-height: 56px;   /* палец, а не курсор */
+  }
+  .row[aria-current="true"] { border-color: var(--accent); }
+  .row .nm { flex: 1 1 auto; min-width: 0; }
+  .row .t1 { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .t2 { color: var(--hint); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .eq { flex: 0 0 auto; width: 18px; color: var(--accent); }
+  .note { color: var(--hint); padding: 24px 8px; text-align: center; }
+  .note b { color: var(--fg); display: block; margin-bottom: 6px; }
+  /* подпись под списком: тихая строка внизу, не экран. Тем же кеглем, что и мета станции */
+  .foot { color: var(--hint); font-size: 12px; padding: 14px 10px 4px; line-height: 1.35; }
+  .retry {
+    margin-top: 12px; padding: 9px 16px; border-radius: 9px; border: 1px solid var(--line);
+    background: var(--card); color: var(--fg); font: inherit; cursor: pointer;
+  }
+  /* ПЛЕЕР. Приклеен снизу: переключать станции и не терять управление воспроизведением. */
+  #bar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+    background: var(--card); border-top: 1px solid var(--line);
+    padding: 10px 12px calc(10px + var(--safe-b));
+    display: none; gap: 10px; align-items: center;
+  }
+  #bar.on { display: flex; }
+  #play {
+    flex: 0 0 auto; width: 52px; height: 52px; border-radius: 50%; border: 0;
+    background: var(--accent); color: var(--accent-fg); font-size: 21px; cursor: pointer;
+  }
+  #play:disabled { opacity: .5; }
+  #meta { flex: 1 1 auto; min-width: 0; }
+  #bnm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #bst { color: var(--hint); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* отказ переносится на две строки: обрезанное многоточием «станция не отвеч...» это
+     ровно тот текст, ради читаемости которого сторож и написан */
+  #bst.err { color: var(--danger); white-space: normal; overflow: visible; }
+  #vol { flex: 0 0 92px; accent-color: var(--accent); }
+  #vol.off { display: none; }        /* iOS: громкость только системная, мёртвый ползунок не показываем */
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <input id="q" type="search" autocomplete="off" autocorrect="off" spellcheck="false">
+</header>
+<div class="chips" id="chips"></div>
+
+<main>
+  <div id="list"></div>
+  <div id="note" class="note hidden"></div>
+</main>
+
+<div id="bar">
+  <button id="play" type="button">▶</button>
+  <div id="meta"><div id="bnm"></div><div id="bst"></div></div>
+  <input id="vol" type="range" min="0" max="1" step="0.05" value="1">
+</div>
+
+<audio id="a" preload="none"></audio>
+
+<script>
+/* ═══ РАДИО: НЕПРЕРЫВНЫЙ ЭФИР ВНУТРИ TELEGRAM ═══════════════════════════════════════
+   Зачем страница существует. В чат Bot API умеет отдавать только ФАЙЛЫ, а файл конечен,
+   поэтому «непрерывное радио в чате» физически недостижимо - в боте живёт честное превью
+   куском. Непрерывно играть умеет обычный <audio> в вебвью, что и делает эта страница.
+
+   ЧЕГО ЗДЕСЬ НЕТ И ПОЧЕМУ. (1) Поток НЕ проксируется: <audio> ходит на сервер станции
+   напрямую. Пропускать чужой эфир через себя это ретрансляция и публичное исполнение,
+   решение Ren - никогда. (2) Обратного канала в бота нет: sendData работает только у
+   аппки, открытой кнопкой reply-клавиатуры, а нас открывают ссылкой startapp. Поэтому
+   избранное живёт в БОТЕ, здесь его нет вовсе - лучше отсутствие кнопки, чем кнопка,
+   которая молча ничего не сохраняет. (3) User-Agent для radio-browser не выставляется:
+   из браузера это forbidden header, JS его не меняет (их собственный плеер работает так же). */
+(function () {
+'use strict';
+
+var TG = (window.Telegram && window.Telegram.WebApp) || null;
+
+/* ─── ЯЗЫК. Пин языка живёт в боте, но сюда он не доезжает: роутер startapp не передаёт
+   ничего, кроме имени аппки, а передеплой роутера - чужая дорожка. Берём язык клиента:
+   для страницы из двух десятков строк этого достаточно. */
+var LANG = (function () {
+  var c = '';
+  try { c = (TG && TG.initDataUnsafe && TG.initDataUnsafe.user || {}).language_code || ''; } catch (e) {}
+  c = (c || navigator.language || 'ru').slice(0, 2).toLowerCase();
+  return c === 'ru' ? 'ru' : 'en';
+})();
+
+var STR = {
+  search:    { ru: 'Поиск станции',            en: 'Search stations' },
+  loading:   { ru: 'Ищу станции...',           en: 'Looking for stations...' },
+  empty_h:   { ru: 'Ничего не нашлось',        en: 'Nothing found' },
+  empty_b:   { ru: 'Попробуй другую страну, жанр или название.',
+               en: 'Try another country, genre or name.' },
+  down_h:    { ru: 'Каталог не отвечает',      en: 'The catalog is not responding' },
+  down_b:    { ru: 'Это сторона radio-browser, не твоя. Можно попробовать ещё раз.',
+               en: 'That is radio-browser side, not yours. You can try again.' },
+  retry:     { ru: 'Ещё раз',                  en: 'Try again' },
+  ready:     { ru: 'готово, жми ▶',            en: 'ready, hit ▶' },
+  conn:      { ru: 'соединяюсь...',            en: 'connecting...' },
+  playing:   { ru: 'играет',                   en: 'on air' },
+  paused:    { ru: 'пауза',                    en: 'paused' },
+  dead:      { ru: 'станция не отвечает, попробуй другую',
+               en: 'station is not responding, try another' },
+  /* станций в каталоге много, но по https отдают не все, а http-поток на https-странице
+     браузер режет как mixed content - молчаливо и без единого события. Поэтому такие
+     станции в список не попадают вовсе, и это надо СКАЗАТЬ, иначе «где Радио Рекорд» */
+  https_h:   { ru: 'В плеере только https-станции', en: 'Player shows https stations only' },
+  https_b:   { ru: 'Остальные браузер внутри Telegram играть не даст. В чате у Гробовщика ' +
+                   'играется любая, куском по три минуты.',
+               en: 'The rest are blocked by the browser inside Telegram. In the chat with ' +
+                   'the Undertaker any station plays, in three-minute pieces.' }
+};
+function t(k) { return (STR[k] || {})[LANG] || (STR[k] || {}).ru || ''; }
+
+/* ─── ФИЛЬТРЫ. ТОТ ЖЕ реестр, что у бота (music_sources.RADIO_COUNTRIES / RADIO_TAGS):
+   расхождение значило бы, что в чате и в плеере разное радио. Связь держит тест
+   ra03 - он сверяет эти строки с питоновским реестром и краснеет на расхождении. */
+var FILTERS = [
+  { id: 'ru',         cc: 'RU', ru: 'Россия',    en: 'Russia' },
+  { id: 'ua',         cc: 'UA', ru: 'Украина',   en: 'Ukraine' },
+  { id: 'kz',         cc: 'KZ', ru: 'Казахстан', en: 'Kazakhstan' },
+  { id: 'by',         cc: 'BY', ru: 'Беларусь',  en: 'Belarus' },
+  { id: 'world',      cc: '',   ru: 'Весь мир',  en: 'World' },
+  { id: 'rock',       tag: 'rock',       ru: 'Рок',      en: 'Rock' },
+  { id: 'electronic', tag: 'electronic', ru: 'Электро',  en: 'Electronic' },
+  { id: 'jazz',       tag: 'jazz',       ru: 'Джаз',     en: 'Jazz' },
+  { id: 'classical',  tag: 'classical',  ru: 'Классика', en: 'Classical' },
+  { id: 'news',       tag: 'news',       ru: 'Новости',  en: 'News' }
+];
+
+var API = 'https://all.api.radio-browser.info';   // пул сам балансирует по нодам
+var LIMIT = 40;
+var LS_LAST = 'hara_radio_last';
+var LS_VOL = 'hara_radio_vol';
+
+var $ = function (id) { return document.getElementById(id); };
+var elList = $('list'), elNote = $('note'), elBar = $('bar'), elPlay = $('play');
+var elNm = $('bnm'), elSt = $('bst'), elVol = $('vol'), elQ = $('q');
+var audio = $('a');
+
+var state = { filter: 'ru', q: '', items: [], cur: null, seq: 0 };
+
+/* ═══ ТЕМА TELEGRAM ═══ */
+function applyTheme() {
+  if (!TG) return;
+  var p = TG.themeParams || {}, r = document.documentElement.style;
+  var map = { '--bg': p.bg_color, '--fg': p.text_color, '--hint': p.hint_color,
+              '--card': p.secondary_bg_color, '--accent': p.button_color,
+              '--accent-fg': p.button_text_color, '--line': p.section_separator_color };
+  for (var k in map) { if (map[k]) r.setProperty(k, map[k]); }
+  if (p.secondary_bg_color && !p.section_separator_color) r.setProperty('--line', p.secondary_bg_color);
+  try { document.documentElement.style.colorScheme = TG.colorScheme || 'dark'; } catch (e) {}
+}
+
+/* ═══ КАТАЛОГ ═══ */
+function stationOf(row) {
+  /* url_resolved уже прошёл редиректы - именно его отдаёт плееру и бот */
+  var url = (row.url_resolved || row.url || '').trim();
+  /* MIXED CONTENT: страница на https, и http-поток браузер заблокирует молча. Такую
+     станцию честнее не показывать, чем показать неиграющей. */
+  if (url.slice(0, 8) !== 'https://') return null;
+  return { id: (row.stationuuid || '').slice(0, 36), name: (row.name || '?').trim().slice(0, 60),
+           url: url, country: (row.countrycode || '').toUpperCase().slice(0, 2),
+           bitrate: parseInt(row.bitrate, 10) || 0, tags: (row.tags || '').slice(0, 60) };
+}
+
+function load() {
+  var my = ++state.seq;                       /* гонка: отвечает только последний запрос */
+  showNote(t('loading'));
+  var p = new URLSearchParams({ limit: String(LIMIT * 4), hidebroken: 'true',
+                                order: 'clickcount', reverse: 'true' });
+  if (state.q) {
+    p.set('name', state.q.slice(0, 60));
+  } else {
+    var f = null, i;
+    for (i = 0; i < FILTERS.length; i++) { if (FILTERS[i].id === state.filter) { f = FILTERS[i]; break; } }
+    if (f && f.tag) p.set('tag', f.tag);
+    if (f && f.cc) p.set('countrycode', f.cc);
+  }
+  var ctl = new AbortController();
+  var tmo = setTimeout(function () { ctl.abort(); }, 12000);
+  fetch(API + '/json/stations/search?' + p.toString(), { signal: ctl.signal })
+    .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function (rows) {
+      clearTimeout(tmo);
+      if (my !== state.seq) return;
+      var out = [], seen = {}, i, st;
+      for (i = 0; i < rows.length && out.length < LIMIT; i++) {
+        st = stationOf(rows[i]);
+        if (!st || !st.id) continue;
+        var key = st.name.toLowerCase();
+        if (seen[key]) continue;
+        seen[key] = 1;
+        out.push(st);
+      }
+      state.items = out;
+      render();
+    })
+    .catch(function (e) {
+      clearTimeout(tmo);
+      if (my !== state.seq) return;
+      state.items = [];
+      showNote(t('down_h'), t('down_b'), true);
+    });
+}
+
+/* ═══ ОТРИСОВКА ═══ */
+function showNote(head, body, retry) {
+  elList.innerHTML = '';
+  elNote.className = 'note';
+  elNote.innerHTML = '';
+  var b = document.createElement('b');
+  b.textContent = head;
+  elNote.appendChild(b);
+  if (body) { var d = document.createElement('div'); d.textContent = body; elNote.appendChild(d); }
+  if (retry) {
+    var btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'retry'; btn.textContent = t('retry');
+    btn.addEventListener('click', load);
+    elNote.appendChild(btn);
+  }
+}
+
+function render() {
+  elNote.className = 'note hidden';
+  elList.innerHTML = '';
+  if (!state.items.length) {
+    /* пусто после https-фильтра и пусто в каталоге - разные вещи, и человеку нужны
+       разные слова: в первом случае станции есть, просто не для этой страницы */
+    showNote(t('empty_h'), t('empty_b'));
+    return;
+  }
+  var frag = document.createDocumentFragment();
+  state.items.forEach(function (st) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'row';
+    if (state.cur && state.cur.id === st.id) b.setAttribute('aria-current', 'true');
+    var nm = document.createElement('div'); nm.className = 'nm';
+    var t1 = document.createElement('div'); t1.className = 't1'; t1.textContent = st.name;
+    var t2 = document.createElement('div'); t2.className = 't2';
+    t2.textContent = [st.country, st.bitrate ? st.bitrate + ' kbps' : '', st.tags]
+      .filter(Boolean).join(' · ');
+    nm.appendChild(t1); nm.appendChild(t2);
+    var eq = document.createElement('div'); eq.className = 'eq';
+    eq.textContent = (state.cur && state.cur.id === st.id && !audio.paused) ? '▮▮' : '';
+    b.appendChild(nm); b.appendChild(eq);
+    b.addEventListener('click', function () { pick(st, true); });
+    frag.appendChild(b);
+  });
+  elList.appendChild(frag);
+  /* подсказка про https идёт ПОД списком и ТИХО: это уточнение, а не сообщение о беде */
+  var hint = document.createElement('div');
+  hint.className = 'foot';
+  hint.textContent = t('https_h') + '. ' + t('https_b');
+  elList.appendChild(hint);
+}
+
+/* ═══ ПЛЕЕР ═══ */
+var watchdog = null;
+
+function say(msg, err) {
+  elSt.textContent = msg;
+  elSt.className = err ? 'err' : '';
+}
+
+function stopWatch() { if (watchdog) { clearTimeout(watchdog); watchdog = null; } }
+
+function dead() {
+  /* ЧЕСТНЫЙ ОТКАЗ ВМЕСТО ВЕЧНОЙ ЗАГРУЗКИ. Станции в этом каталоге отваливаются постоянно,
+     и <audio> в такой ситуации не всегда шлёт error - он просто молчит. Поэтому сторож
+     по времени: не заиграло за 12 секунд - значит не заиграет. */
+  stopWatch();
+  try { audio.pause(); } catch (e) {}
+  elPlay.textContent = '▶';
+  say(t('dead'), true);
+  markRow();
+}
+
+function markRow() {
+  var rows = elList.querySelectorAll('.row'), i;
+  for (i = 0; i < rows.length; i++) {
+    var on = state.cur && rows[i].querySelector('.t1').textContent === state.cur.name;
+    if (on) { rows[i].setAttribute('aria-current', 'true'); } else { rows[i].removeAttribute('aria-current'); }
+    rows[i].querySelector('.eq').textContent = (on && !audio.paused) ? '▮▮' : '';
+  }
+}
+
+function pick(st, autoplay) {
+  state.cur = st;
+  elBar.className = 'on';
+  elNm.textContent = st.name;
+  try { localStorage.setItem(LS_LAST, JSON.stringify(st)); } catch (e) {}
+  audio.src = st.url;
+  markRow();
+  if (autoplay) { start(); } else { say(t('ready')); elPlay.textContent = '▶'; }
+}
+
+function start() {
+  if (!state.cur) return;
+  say(t('conn'));
+  elPlay.textContent = '❚❚';
+  stopWatch();
+  watchdog = setTimeout(dead, 12000);
+  var p;
+  try { p = audio.play(); } catch (e) { dead(); return; }
+  if (p && p.catch) {
+    p.catch(function (err) {
+      stopWatch();
+      elPlay.textContent = '▶';
+      /* NotAllowedError = автоплей заблокирован (iOS требует ПЕРВЫЙ play по тапу).
+         Это не поломка станции, и говорить «станция не отвечает» тут нельзя. */
+      if (err && err.name === 'NotAllowedError') { say(t('ready')); } else { dead(); }
+    });
+  }
+}
+
+elPlay.addEventListener('click', function () {
+  if (!state.cur) return;
+  if (audio.paused) { start(); } else { stopWatch(); audio.pause(); }
+});
+
+audio.addEventListener('playing', function () { stopWatch(); elPlay.textContent = '❚❚'; say(t('playing')); markRow(); });
+audio.addEventListener('pause', function () { stopWatch(); elPlay.textContent = '▶'; say(t('paused')); markRow(); });
+audio.addEventListener('error', dead);
+audio.addEventListener('stalled', function () { if (!audio.paused && !watchdog) watchdog = setTimeout(dead, 12000); });
+
+/* ГРОМКОСТЬ. На iOS она СИСТЕМНАЯ: audio.volume там read-only, присваивание молча не
+   действует. Проверяем на живом элементе и убираем мёртвый ползунок, а не делаем вид. */
+(function volumeSetup() {
+  var vol = 1;
+  try { vol = Math.min(1, Math.max(0, parseFloat(localStorage.getItem(LS_VOL)))); } catch (e) {}
+  if (!(vol >= 0 && vol <= 1)) vol = 1;
+  audio.volume = 0.5;
+  var works = Math.abs(audio.volume - 0.5) < 0.01;
+  audio.volume = vol;
+  if (!works) { elVol.className = 'off'; return; }
+  elVol.value = String(vol);
+  elVol.addEventListener('input', function () {
+    audio.volume = parseFloat(elVol.value);
+    try { localStorage.setItem(LS_VOL, elVol.value); } catch (e) {}
+  });
+})();
+
+/* ═══ ФИЛЬТРЫ И ПОИСК ═══ */
+(function chips() {
+  var box = $('chips');
+  FILTERS.forEach(function (f) {
+    var c = document.createElement('button');
+    c.type = 'button'; c.className = 'chip'; c.textContent = f[LANG] || f.ru;
+    c.setAttribute('aria-pressed', f.id === state.filter ? 'true' : 'false');
+    c.addEventListener('click', function () {
+      state.filter = f.id; state.q = ''; elQ.value = '';
+      var all = box.querySelectorAll('.chip'), i;
+      for (i = 0; i < all.length; i++) all[i].setAttribute('aria-pressed', 'false');
+      c.setAttribute('aria-pressed', 'true');
+      load();
+    });
+    box.appendChild(c);
+  });
+})();
+
+elQ.placeholder = t('search');
+var qt = null;
+elQ.addEventListener('input', function () {
+  clearTimeout(qt);
+  qt = setTimeout(function () {
+    var v = elQ.value.trim();
+    if (v === state.q) return;
+    state.q = v;
+    if (!v) {
+      var all = document.querySelectorAll('.chip'), i;
+      for (i = 0; i < all.length; i++) {
+        all[i].setAttribute('aria-pressed', FILTERS[i].id === state.filter ? 'true' : 'false');
+      }
+    } else {
+      var a2 = document.querySelectorAll('.chip'), j;
+      for (j = 0; j < a2.length; j++) a2[j].setAttribute('aria-pressed', 'false');
+    }
+    load();
+  }, 400);                                    /* каталог чужой, дёргать на каждую букву невежливо */
+});
+
+/* ═══ СТАРТ ═══ */
+applyTheme();
+if (TG) {
+  try { TG.ready(); TG.expand(); } catch (e) {}
+  try { TG.onEvent('themeChanged', applyTheme); } catch (e) {}
+}
+document.documentElement.lang = LANG;
+
+/* ПОСЛЕДНЯЯ СТАНЦИЯ. Восстанавливаем и ПОКАЗЫВАЕМ готовой, но НЕ играем сами: на iOS
+   первый play обязан быть по тапу, иначе браузер его отклонит - и человек увидит
+   «не отвечает» там, где станция жива. Один тап честнее ложной ошибки. */
+(function restore() {
+  var raw = null;
+  try { raw = localStorage.getItem(LS_LAST); } catch (e) {}
+  if (!raw) return;
+  try {
+    var st = JSON.parse(raw);
+    if (st && st.url && st.name) pick(st, false);
+  } catch (e) {}
+})();
+
+load();
+})();
+</script>
+</body>
+</html>
