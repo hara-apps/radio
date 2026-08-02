@@ -119,6 +119,17 @@
     background: var(--accent); color: var(--accent-fg); font-size: 30px; cursor: pointer;
   }
   #fmeta { color: var(--hint); font-size: 13px; margin-top: 18px; }
+  /* РЯД ДЕЙСТВИЙ. Живёт в полноэкранном плеере: там есть место под палец, и человек,
+     который «слушает», уже там. В мини-баре его нет намеренно - он и так плотный. */
+  #acts { display: none; gap: 8px; margin-top: 20px; flex-wrap: wrap; justify-content: center; }
+  #acts.on { display: flex; }
+  #acts button {
+    min-width: 56px; min-height: 44px; padding: 8px 12px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--card); color: var(--fg);
+    font: inherit; font-size: 18px; cursor: pointer;
+  }
+  #acts button:active { background: var(--accent); color: var(--accent-fg); }
+  #actnote { color: var(--hint); font-size: 12px; margin-top: 10px; min-height: 16px; }
   /* ПЕРЕМОТКА. Живёт по признаку КОНЕЧНОЙ длительности, а не по номеру вкладки: у
      эфира duration = Infinity, и перематывать там физически нечего. Признак берётся у
      самого файла, поэтому разойтись с реальностью не может. */
@@ -160,6 +171,8 @@
   </div>
   <button id="fplay" type="button">▶</button>
   <div id="fmeta"></div>
+  <div id="acts"></div>
+  <div id="actnote"></div>
 </div>
 
 <audio id="a" preload="none"></audio>
@@ -277,6 +290,20 @@ var STR = {
   /* Атрибуция обязательна там, где лицензия её требует (CC). Строка короткая и стоит
      под именем трека - она часть условия, на котором нам этот файл разрешили. */
   lic:       { ru: 'лицензия: {l}',             en: 'licence: {l}' },
+  a_like:    { ru: 'Нравится',                  en: 'Like' },
+  a_no:      { ru: 'Не нравится',                en: 'Dislike' },
+  a_star:    { ru: 'В избранное',                en: 'To favourites' },
+  a_rec:     { ru: 'Записать кусок',             en: 'Record a piece' },
+  a_dj:      { ru: 'Диджей',                     en: 'DJ' },
+  /* ЧЕСТНО ПРО ПЕРЕХОД: любое действие уходит боту через Telegram, и плеер на секунду
+     свернётся. Сказать это заранее дешевле, чем оставить человека гадать, куда его унесло. */
+  a_hint:    { ru: 'Уйдёт боту в чат, плеер свернётся на секунду',
+               en: 'Goes to the bot in the chat, the player folds away for a second' },
+  a_sent:    { ru: 'Отправил боту',              en: 'Sent to the bot' },
+  fav_tab:   { ru: '⭐ Избранное',                en: '⭐ Favourites' },
+  fav_empty_h: { ru: 'Избранного нет',            en: 'No favourites' },
+  fav_empty_b: { ru: 'Открой станцию и жми «В избранное» тут или в чате.',
+                 en: 'Open a station and tap "To favourites" here or in the chat.' },
   fav_h:     { ru: 'Избранное не открылось',    en: 'Favourites did not open' },
   fav_b:     { ru: 'Каталог не отдал эти станции. Открой список в чате.',
                en: 'The catalog did not return these stations. Open the list in the chat.' }
@@ -460,6 +487,32 @@ function openScreen(scr) {
   switchTo(sec.id);
 }
 
+var LS_FAV = 'hara_fav_ids';
+
+
+function favIds() {
+  /* Избранное = то, что прислал бот в адресе, ПЛЮС отмеченное прямо тут. Локальная часть
+     нужна, чтобы ⭐ в плеере давала видимый результат СРАЗУ: сигнал уже уехал боту, но
+     обратно он вернётся только при следующем открытии, а чип должен появиться сейчас. */
+  var out = (qp('fav') || '').split(',').filter(Boolean);
+  try {
+    var mine = JSON.parse(localStorage.getItem(LS_FAV) || '[]');
+    mine.forEach(function (x) { if (out.indexOf(x) < 0) out.push(x); });
+  } catch (e) {}
+  return out.slice(0, 40);
+}
+
+
+function rememberFav(id) {
+  if (!id) return;
+  try {
+    var mine = JSON.parse(localStorage.getItem(LS_FAV) || '[]');
+    if (mine.indexOf(id) < 0) { mine.push(id); }
+    localStorage.setItem(LS_FAV, JSON.stringify(mine.slice(-40)));
+  } catch (e) {}
+}
+
+
 function showFav(list) {
   /* Станции приезжают списком uuid, а не целиком: адрес кнопки не резиновый. Разворачиваем
      их через тот же каталог, которым пользуется весь раздел. */
@@ -475,7 +528,7 @@ function showFav(list) {
       if (my !== state.seq) return;
       var out = [], i, st;
       for (i = 0; i < rows.length; i++) { st = stationOf(rows[i]); if (st && st.id) out.push(st); }
-      if (!out.length) { showNote(t('fav_h'), t('fav_b')); return; }
+      if (!out.length) { showNote(t('fav_empty_h'), t('fav_empty_b')); return; }
       state.items = out;
       render();
     })
@@ -751,6 +804,7 @@ function paintFull(st) {
   elFava.appendChild(a);
   elFnm.textContent = st.name;
   elFmeta.textContent = st.sub || '';
+  paintActs(st);
 }
 
 
@@ -834,6 +888,65 @@ audio.addEventListener('stalled', function () { if (!audio.paused && !watchdog) 
     try { localStorage.setItem(LS_VOL, elVol.value); } catch (e) {}
   });
 })();
+
+/* ═══ ДЕЙСТВИЯ ИЗ ПЛЕЕРА В БОТА ══════════════════════════════════════════════════════
+   ПОЧЕМУ DEEP-LINK, А НЕ sendData. У аппки два способа сказать что-то боту, и ОБА
+   прерывают прослушивание - это свойство платформы, а не наша лень:
+     sendData    - работает ТОЛЬКО у аппки, открытой кнопкой reply-клавиатуры, и по
+                   контракту ЗАКРЫВАЕТ аппку. Плюс нам пришлось бы сменить способ
+                   открытия, потеряв параметры ссылки (screen/fav/lang, весь B3) и заняв
+                   нижнее меню, где живёт подпись режима (закон №27).
+     deep-link   - работает при ЛЮБОМ способе открытия, ничего не ломает, и на большинстве
+                   клиентов сворачивает аппку, а не убивает: вернуться один тап.
+   Выбран deep-link. Прерывание НАЗЫВАЕТСЯ человеку заранее подписью под кнопками, а не
+   выясняется после первого тапа.
+
+   ЛАЙК НЕЛЬЗЯ КОПИТЬ И СЛАТЬ ПАЧКОЙ. Опознаёт трек бот, в момент получения сигнала: к
+   моменту отправки «трёх накопленных лайков» в эфире играет уже другое, и мы запомнили бы
+   не тот трек. Поэтому один тап - одна отправка, и это не оптимизируется. */
+function botLink(code) {
+  return 'https://t.me/' + BOT + '?start=' + encodeURIComponent(code);
+}
+
+function act(code, label) {
+  if (!BOT || BOT.indexOf('{{') === 0) return;
+  $('actnote').textContent = t('a_sent') + ': ' + label;
+  var url = botLink(code);
+  try {
+    if (TG && TG.openTelegramLink) { TG.openTelegramLink(url); return; }
+  } catch (e) {}
+  try { window.open(url, '_blank'); } catch (e) { location.href = url; }
+}
+
+function paintActs(it) {
+  /* Набор кнопок зависит от того, ЧТО играет: записать можно живой эфир, а не выпуск
+     подкаста, который и так лежит файлом. Диджей доступен всегда - он про настроение. */
+  var box = $('acts');
+  box.innerHTML = '';
+  if (!BOT || BOT.indexOf('{{') === 0) { box.className = ''; return; }
+  var rows = [];
+  if (it && !it.pod && it.id) {
+    rows.push(['👍', 'a_like', 'l' + it.id]);
+    rows.push(['👎', 'a_no', 'd' + it.id]);
+    rows.push(['⭐', 'a_star', 's' + it.id]);
+    rows.push(['⏺', 'a_rec', 'r' + it.id]);
+  }
+  rows.push(['🎧', 'a_dj', 'j']);
+  rows.forEach(function (r) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = r[0];
+    b.title = t(r[1]);
+    b.setAttribute('aria-label', t(r[1]));
+    b.addEventListener('click', function () {
+      if (r[2].charAt(0) === 's' && it && it.id) { rememberFav(it.id); paintChips(); }
+      act(r[2], t(r[1]));
+    });
+    box.appendChild(b);
+  });
+  box.className = 'on';
+  $('actnote').textContent = t('a_hint');
+}
 
 /* ═══ ПЕРЕМОТКА ══════════════════════════════════════════════════════════════════════
    Появляется по КОНЕЧНОЙ длительности источника, а не по разделу: у живого эфира
@@ -923,7 +1036,11 @@ function paintChips() {
   elQ.placeholder = t(sec.ph || 'search');
   var list;
   if (sec.kind === 'live') {
-    list = FILTERS;
+    /* ⭐ ИЗБРАННОЕ ОТДЕЛЬНЫМ ЧИПОМ: станции приезжают в адресе от бота (fav=) и
+       дополняются тем, что человек отметил прямо здесь. Чипа нет, когда отмечать нечего -
+       пустой раздел хуже отсутствующего. */
+    list = FILTERS.slice();
+    if (favIds().length) list.unshift({ id: 'fav', ru: t('fav_tab'), en: t('fav_tab') });
   } else {
     list = [{ id: '', ru: t('p_all'), en: t('p_all') }].concat(
       (DATA[sec.id] || {}).topics || []);
@@ -936,6 +1053,14 @@ function paintChips() {
     c.addEventListener('click', function () {
       if (sec.kind === 'live') { state.filter = f.id; }
       else { state.ptopic = f.id; state.pshow = null; }
+      if (f.id === 'fav') {
+        state.q = ''; elQ.value = '';
+        var all = box.querySelectorAll('.chip'), k;
+        for (k = 0; k < all.length; k++) all[k].setAttribute('aria-pressed', 'false');
+        c.setAttribute('aria-pressed', 'true');
+        showFav(favIds().join(','));
+        return;
+      }
       state.q = ''; elQ.value = '';
       var all = box.querySelectorAll('.chip'), i;
       for (i = 0; i < all.length; i++) all[i].setAttribute('aria-pressed', 'false');
@@ -971,7 +1096,10 @@ elQ.addEventListener('input', function () {
    и перезагружаемся ОДИН раз при расхождении.
    Защита от цикла обязательна: если version.txt почему-то всегда отличается (не доложили
    при деплое, отдаётся не тот файл), без флага страница перезагружалась бы вечно. */
-var VERSION = '12fbffbdf1b3';
+var VERSION = '46b365d2d17d';
+/* ИМЯ БОТА подставляется при выкладке (как и версия). Не подставлено - действий в плеере
+   нет вовсе: кнопка, которой некуда уходить, хуже отсутствующей. */
+var BOT = 'theundertaker_test_bot';
 
 (function checkVersion() {
   if (VERSION.indexOf('{{') === 0) return;          /* не задеплоено - сверять не с чем */
