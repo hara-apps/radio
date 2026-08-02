@@ -24,6 +24,11 @@
     padding-bottom: calc(92px + var(--safe-b));
   }
   header { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 10px 12px 6px; }
+  /* ПЕРЕКЛЮЧАТЕЛЬ РАЗДЕЛОВ. Показывается ТОЛЬКО когда есть что переключать: без
+     podcasts.json одинокая вкладка «Радио» это шум, а не навигация. */
+  #tabs { display: none; gap: 6px; margin-bottom: 8px; }
+  #tabs.on { display: flex; }
+  #tabs .chip { flex: 1 1 0; text-align: center; }
   #q {
     width: 100%; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--line);
     background: var(--card); color: var(--fg); font-size: 16px;  /* 16px = iOS не зумит */
@@ -107,12 +112,20 @@
     background: var(--accent); color: var(--accent-fg); font-size: 30px; cursor: pointer;
   }
   #fmeta { color: var(--hint); font-size: 13px; margin-top: 18px; }
+  /* ПЕРЕМОТКА. Живёт по признаку КОНЕЧНОЙ длительности, а не по номеру вкладки: у
+     эфира duration = Infinity, и перематывать там физически нечего. Признак берётся у
+     самого файла, поэтому разойтись с реальностью не может. */
+  #seek { display: none; width: min(100%, 420px); margin-top: 22px; }
+  #seek.on { display: block; }
+  #pos { width: 100%; accent-color: var(--accent); }
+  .times { display: flex; justify-content: space-between; color: var(--hint); font-size: 12px; }
   .hidden { display: none !important; }
 </style>
 </head>
 <body>
 
 <header>
+  <div id="tabs"></div>
   <input id="q" type="search" autocomplete="off" autocorrect="off" spellcheck="false">
 </header>
 <div class="chips" id="chips"></div>
@@ -134,6 +147,10 @@
   <div id="fava" class="ava" style="width:min(62vw,260px);height:min(62vw,260px)"></div>
   <div id="fnm"></div>
   <div id="fst"></div>
+  <div id="seek">
+    <input id="pos" type="range" min="0" max="1000" step="1" value="0">
+    <div class="times"><span id="tcur">0:00</span><span id="tall">0:00</span></div>
+  </div>
   <button id="fplay" type="button">▶</button>
   <div id="fmeta"></div>
 </div>
@@ -193,7 +210,29 @@ var STR = {
   https_b:   { ru: 'Остальные браузер внутри Telegram играть не даст. В чате у Гробовщика ' +
                    'играется любая, куском по три минуты.',
                en: 'The rest are blocked by the browser inside Telegram. In the chat with ' +
-                   'the Undertaker any station plays, in three-minute pieces.' }
+                   'the Undertaker any station plays, in three-minute pieces.' },
+  /* ── ПОДКАСТЫ ── */
+  tab_radio: { ru: '📻 Радио',                  en: '📻 Radio' },
+  tab_pod:   { ru: '🎙 Подкасты',               en: '🎙 Podcasts' },
+  p_search:  { ru: 'Поиск шоу в каталоге',      en: 'Search shows in the catalog' },
+  p_all:     { ru: 'Все',                       en: 'All' },
+  p_back:    { ru: 'Назад к шоу',               en: 'Back to shows' },
+  /* СКЛОНЕНИЕ, А НЕ «{n} выпусков»: «2 выпусков» в подписи под каждым шоу читается как
+     недоделка. У русского три формы, у английского две - поэтому формы лежат в реестре,
+     а не собираются условием в коде. */
+  p_eps_1:   { ru: 'выпуск',                    en: 'episode' },
+  p_eps_2:   { ru: 'выпуска',                   en: 'episodes' },
+  p_eps_5:   { ru: 'выпусков',                  en: 'episodes' },
+  p_empty_h: { ru: 'Шоу не нашлось',            en: 'No shows found' },
+  p_empty_b: { ru: 'Попробуй другую тему или название.',
+               en: 'Try another topic or name.' },
+  /* СВЕЖЕСТЬ КАТАЛОГА НАЗЫВАЕТСЯ ЧЕСТНО. Ключ каталога подписывает запросы секретом, а
+     страница лежит статикой - секрет в неё не положить, поэтому здесь СНИМОК, собранный
+     ботом при выкладке. Живой поиск по всему каталогу остаётся в чате, и это сказано. */
+  p_built:   { ru: 'Каталог собран {d}. Живой поиск по всему каталогу идёт в чате у Гробовщика.',
+               en: 'Catalog built {d}. Live search over the whole catalog is in the chat ' +
+                   'with the Undertaker.' },
+  ms_pod:    { ru: 'Подкаст · Гробовщик',       en: 'Podcast · The Undertaker' }
 };
 function t(k) { return (STR[k] || {})[LANG] || (STR[k] || {}).ru || ''; }
 
@@ -217,6 +256,8 @@ var API = 'https://all.api.radio-browser.info';   // пул сам баланс�
 var LIMIT = 40;
 var LS_LAST = 'hara_radio_last';
 var LS_VOL = 'hara_radio_vol';
+var LS_POS = 'hara_pod_pos';        /* докуда дослушан выпуск: час звука за один заход не слушают */
+var POD_FILE = 'podcasts.json';     /* снимок каталога, кладёт deploy_radio рядом со страницей */
 
 var $ = function (id) { return document.getElementById(id); };
 var elList = $('list'), elNote = $('note'), elBar = $('bar'), elPlay = $('play');
@@ -224,9 +265,12 @@ var elFull = $('full'), elFava = $('fava'), elFnm = $('fnm'), elFst = $('fst');
 var elBava = $('bava');
 var elFplay = $('fplay'), elFmeta = $('fmeta');
 var elNm = $('bnm'), elSt = $('bst'), elVol = $('vol'), elQ = $('q');
+var elSeek = $('seek'), elPos = $('pos'), elTcur = $('tcur'), elTall = $('tall');
 var audio = $('a');
 
-var state = { filter: 'ru', q: '', items: [], cur: null, seq: 0 };
+var state = { mode: 'radio', filter: 'ru', q: '', items: [], cur: null, seq: 0,
+              ptopic: '', pshow: null };
+var POD = null;                     /* снимок каталога подкастов; null = его нет, вкладки тоже */
 
 /* ═══ ТЕМА TELEGRAM ═══ */
 function applyTheme() {
@@ -253,13 +297,88 @@ function stationOf(row) {
      у radio-browser встречается чаще, чем хотелось бы. */
   var ico = (row.favicon || '').trim();
   if (ico.slice(0, 8) !== 'https://') ico = '';
-  return { id: (row.stationuuid || '').slice(0, 36), name: (row.name || '?').trim().slice(0, 60),
-           url: url, country: (row.countrycode || '').toUpperCase().slice(0, 2),
-           bitrate: parseInt(row.bitrate, 10) || 0, tags: (row.tags || '').slice(0, 60),
-           icon: ico };
+  var st = { id: (row.stationuuid || '').slice(0, 36), name: (row.name || '?').trim().slice(0, 60),
+             url: url, country: (row.countrycode || '').toUpperCase().slice(0, 2),
+             bitrate: parseInt(row.bitrate, 10) || 0, tags: (row.tags || '').slice(0, 60),
+             icon: ico, artist: t('ms_artist') };
+  /* ВТОРАЯ СТРОКА СОБИРАЕТСЯ ОДИН РАЗ, здесь. Раньше её строили и список, и полноэкранный
+     каждый по-своему, и «кбит/с» уже разъехалось: в списке оно было латиницей всегда. */
+  st.sub = [st.country, st.bitrate ? t('kbps').replace('{n}', st.bitrate) : '', st.tags]
+    .filter(Boolean).join(' · ');
+  return st;
+}
+
+/* ═══ ПОДКАСТЫ ═══════════════════════════════════════════════════════════════════════
+   Каталог тут СТАТИЧЕСКИЙ и это осознанно. Запрос к PodcastIndex подписывается СЕКРЕТОМ,
+   а страница лежит на Pages голой статикой - положить в неё ключ значит его опубликовать.
+   Своего бэкенда у аппки нет, поэтому снимок собирает бот при выкладке (podcasts.snapshot)
+   и кладёт файлом рядом. Живой поиск по всему каталогу остаётся в чате, где ключ на месте,
+   и в подписи под списком это сказано прямо вместе с датой сборки. */
+function mmss(sec) {
+  sec = Math.max(0, Math.round(sec || 0));
+  var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+  var p = function (n) { return (n < 10 ? '0' : '') + n; };
+  return h ? (h + ':' + p(m) + ':' + p(s)) : (m + ':' + p(s));
+}
+
+function epsWord(n) {
+  if (LANG !== 'ru') return n + ' ' + t(n === 1 ? 'p_eps_1' : 'p_eps_5');
+  var a = n % 100, b = n % 10;
+  if (a >= 11 && a <= 14) return n + ' ' + t('p_eps_5');       /* 11-14 всегда «выпусков» */
+  if (b === 1) return n + ' ' + t('p_eps_1');
+  if (b >= 2 && b <= 4) return n + ' ' + t('p_eps_2');
+  return n + ' ' + t('p_eps_5');
+}
+
+function epItem(sh, ep) {
+  /* ВЫПУСК В ТОЙ ЖЕ ФОРМЕ, ЧТО И СТАНЦИЯ: плеер, обложка, локскрин и мини-бар не должны
+     знать, что играет. Иначе каждая новая мелочь чинилась бы дважды. */
+  return { id: 'p' + ep.id, name: ep.title, url: ep.url, icon: sh.image || '',
+           artist: sh.title, pod: true, sec: ep.sec || 0,
+           sub: [ep.sec ? mmss(ep.sec) : '', sh.title].filter(Boolean).join(' · ') };
+}
+
+function loadPodCatalog() {
+  /* Один запрос на старте. Нет файла - НЕТ И ВКЛАДКИ: пустой раздел «Подкасты», который
+     ничего не открывает, хуже отсутствующего (то же правило, что у кнопки плеера в боте,
+     которой нет без настроенной мини-аппки). */
+  return fetch(POD_FILE, { cache: 'no-cache' })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (j) {
+      if (!j || !j.shows || !j.shows.length) return;
+      POD = j;
+      paintTabs();
+    })
+    .catch(function () { /* нет файла - работаем радио, молча и без обещаний */ });
+}
+
+function loadPod() {
+  /* Сети тут нет вовсе: снимок уже в памяти. Два уровня - шоу и выпуски выбранного шоу. */
+  if (state.pshow) {
+    var eps = (state.pshow.eps || []).map(function (e) { return epItem(state.pshow, e); });
+    /* ВОЗВРАТ ПЕРВОЙ СТРОКОЙ СПИСКА, а не кнопкой «назад» где-то ещё: список длинный,
+       и уводить палец наверх ради выхода из шоу неудобно ровно там, где выходят чаще. */
+    eps.unshift({ id: 'back', name: '⬅ ' + t('p_back'), sub: '', icon: '',
+                  tap: function () { state.pshow = null; load(); } });
+    state.items = eps;
+    render();
+    return;
+  }
+  var q = state.q.toLowerCase();
+  state.items = POD.shows.filter(function (sh) {
+    if (state.ptopic && sh.topic !== state.ptopic) return false;
+    if (!q) return true;
+    return (sh.title + ' ' + (sh.author || '')).toLowerCase().indexOf(q) >= 0;
+  }).map(function (sh) {
+    return { id: 's' + sh.id, name: sh.title, icon: sh.image || '',
+             sub: [sh.author, epsWord((sh.eps || []).length)].filter(Boolean).join(' · '),
+             tap: function () { state.pshow = sh; load(); } };
+  });
+  render();
 }
 
 function load() {
+  if (state.mode === 'pod') { loadPod(); return; }
   var my = ++state.seq;                       /* гонка: отвечает только последний запрос */
   showNote(t('loading'));
   var p = new URLSearchParams({ limit: String(LIMIT * 4), hidebroken: 'true',
@@ -343,33 +462,44 @@ function render() {
   if (!state.items.length) {
     /* пусто после https-фильтра и пусто в каталоге - разные вещи, и человеку нужны
        разные слова: в первом случае станции есть, просто не для этой страницы */
-    showNote(t('empty_h'), t('empty_b'));
+    var pod = state.mode === 'pod';
+    showNote(t(pod ? 'p_empty_h' : 'empty_h'), t(pod ? 'p_empty_b' : 'empty_b'));
     return;
   }
   var frag = document.createDocumentFragment();
   state.items.forEach(function (st) {
     var b = document.createElement('button');
     b.type = 'button'; b.className = 'row';
-    if (state.cur && state.cur.id === st.id) b.setAttribute('aria-current', 'true');
+    if (st.url && state.cur && state.cur.id === st.id) b.setAttribute('aria-current', 'true');
     b.appendChild(avatar(st, 40));
     var nm = document.createElement('div'); nm.className = 'nm';
     var t1 = document.createElement('div'); t1.className = 't1'; t1.textContent = st.name;
     var t2 = document.createElement('div'); t2.className = 't2';
-    t2.textContent = [st.country, st.bitrate ? st.bitrate + ' kbps' : '', st.tags]
-      .filter(Boolean).join(' · ');
+    t2.textContent = st.sub || '';
     nm.appendChild(t1); nm.appendChild(t2);
     var eq = document.createElement('div'); eq.className = 'eq';
-    eq.textContent = (state.cur && state.cur.id === st.id && !audio.paused) ? '▮▮' : '';
+    eq.textContent = (st.url && state.cur && state.cur.id === st.id && !audio.paused) ? '▮▮' : '';
     b.appendChild(nm); b.appendChild(eq);
-    b.addEventListener('click', function () { pick(st, true); });
+    /* СТРОКА ЛИБО ИГРАЕТ, ЛИБО ВЕДЁТ. Признак - наличие url у самой строки, а не режим:
+       в списке выпусков первая строка это возврат, и она не должна ничего запускать. */
+    b.addEventListener('click', function () {
+      if (st.url) { pick(st, true); } else if (st.tap) { st.tap(); }
+    });
     frag.appendChild(b);
   });
   elList.appendChild(frag);
-  /* подсказка про https идёт ПОД списком и ТИХО: это уточнение, а не сообщение о беде */
+  /* подпись под списком идёт ТИХО: это уточнение, а не сообщение о беде */
   var hint = document.createElement('div');
   hint.className = 'foot';
-  hint.textContent = t('https_h') + '. ' + t('https_b');
-  elList.appendChild(hint);
+  if (state.mode === 'pod') {
+    var d = '';
+    try { d = new Date((POD.built || 0) * 1000).toLocaleDateString(LANG === 'ru' ? 'ru-RU' : 'en-GB'); }
+    catch (e) { d = ''; }
+    hint.textContent = d ? t('p_built').replace('{d}', d) : '';
+  } else {
+    hint.textContent = t('https_h') + '. ' + t('https_b');
+  }
+  if (hint.textContent) elList.appendChild(hint);
 }
 
 /* ═══ ПЛЕЕР ═══ */
@@ -397,8 +527,10 @@ function mediaMeta(st) {
     if (st && st.icon) art = [{ src: st.icon, sizes: '512x512', type: 'image/png' }];
     navigator.mediaSession.metadata = new window.MediaMetadata({
       title: (st && st.name) || 'Radio',
-      artist: t('ms_artist'),
-      album: (st && st.country) || '',
+      /* у выпуска исполнитель это ШОУ, у станции - мы: на локскрине человек должен
+         видеть, что именно играет, а не одинаковую строку на любой звук */
+      artist: (st && st.artist) || t('ms_artist'),
+      album: (st && st.pod) ? t('ms_pod') : ((st && st.country) || ''),
       artwork: art
     });
     return true;
@@ -461,8 +593,7 @@ function paintFull(st) {
   a.style.width = a.style.height = '100%';
   elFava.appendChild(a);
   elFnm.textContent = st.name;
-  elFmeta.textContent = [st.country, st.bitrate ? t('kbps').replace('{n}', st.bitrate) : '',
-                         st.tags].filter(Boolean).join(' · ');
+  elFmeta.textContent = st.sub || '';
 }
 
 
@@ -547,15 +678,101 @@ audio.addEventListener('stalled', function () { if (!audio.paused && !watchdog) 
   });
 })();
 
-/* ═══ ФИЛЬТРЫ И ПОИСК ═══ */
-(function chips() {
+/* ═══ ПЕРЕМОТКА ══════════════════════════════════════════════════════════════════════
+   Появляется по КОНЕЧНОЙ длительности источника, а не по разделу: у живого эфира
+   duration = Infinity, и перематывать там нечего. Признак берётся у самого файла и
+   поэтому не может разойтись с тем, что играет.
+   ДОКУДА ДОСЛУШАЛ - ЗАПОМИНАЕМ: часовой выпуск за один заход не слушают, и начинать
+   его сначала после каждого закрытия аппки значит не дать дослушать вовсе. */
+var dragging = false;
+
+function posKey(it) { return (it && it.pod) ? (LS_POS + ':' + it.id) : ''; }
+
+function savePos() {
+  var k = posKey(state.cur);
+  if (!k || !isFinite(audio.duration) || audio.currentTime < 30) return;
+  /* дослушанное до конца НЕ запоминаем: иначе следующий заход откроется на титрах */
+  try {
+    if (audio.duration - audio.currentTime < 30) { localStorage.removeItem(k); }
+    else { localStorage.setItem(k, String(Math.floor(audio.currentTime))); }
+  } catch (e) {}
+}
+
+function paintSeek() {
+  var ok = isFinite(audio.duration) && audio.duration > 0;
+  elSeek.className = ok ? 'on' : '';
+  if (!ok) return;
+  if (!dragging) elPos.value = String(Math.round(audio.currentTime / audio.duration * 1000));
+  elTcur.textContent = mmss(audio.currentTime);
+  elTall.textContent = mmss(audio.duration);
+}
+
+elPos.addEventListener('input', function () { dragging = true; });
+elPos.addEventListener('change', function () {
+  dragging = false;
+  if (!isFinite(audio.duration) || !audio.duration) return;
+  try { audio.currentTime = audio.duration * (parseInt(elPos.value, 10) / 1000); } catch (e) {}
+});
+audio.addEventListener('loadedmetadata', function () {
+  paintSeek();
+  var k = posKey(state.cur), was = null;
+  if (!k) return;
+  try { was = parseInt(localStorage.getItem(k), 10); } catch (e) {}
+  if (was > 30 && isFinite(audio.duration) && was < audio.duration - 30) {
+    try { audio.currentTime = was; } catch (e) {}
+    paintSeek();
+  }
+});
+audio.addEventListener('timeupdate', paintSeek);
+audio.addEventListener('pause', savePos);
+audio.addEventListener('ended', function () {
+  var k = posKey(state.cur);
+  if (k) { try { localStorage.removeItem(k); } catch (e) {} }
+  setPlayIcon('▶'); mediaState(false); markRow();
+});
+window.addEventListener('pagehide', savePos);
+
+/* ═══ ВКЛАДКИ, ФИЛЬТРЫ И ПОИСК ═══ */
+function paintTabs() {
+  var box = $('tabs');
+  box.innerHTML = '';
+  if (!POD) { box.className = ''; return; }    /* каталога нет - вкладок тоже, см. loadPodCatalog */
+  box.className = 'on';
+  [['radio', 'tab_radio'], ['pod', 'tab_pod']].forEach(function (pair) {
+    var c = document.createElement('button');
+    c.type = 'button'; c.className = 'chip'; c.textContent = t(pair[1]);
+    c.setAttribute('aria-pressed', state.mode === pair[0] ? 'true' : 'false');
+    c.addEventListener('click', function () {
+      if (state.mode === pair[0]) return;
+      state.mode = pair[0]; state.q = ''; elQ.value = ''; state.pshow = null;
+      paintTabs(); paintChips();
+      load();
+    });
+    box.appendChild(c);
+  });
+}
+
+function paintChips() {
+  /* Чипы СВОИ на раздел: у радио страны и жанры, у подкастов темы из снимка. Перерисовка
+     целиком проще синхронизации двух наборов - и не оставляет чужого нажатым. */
   var box = $('chips');
-  FILTERS.forEach(function (f) {
+  box.innerHTML = '';
+  elQ.placeholder = t(state.mode === 'pod' ? 'p_search' : 'search');
+  var list;
+  if (state.mode === 'pod') {
+    list = [{ id: '', ru: t('p_all'), en: t('p_all') }].concat(POD ? POD.topics : []);
+  } else {
+    list = FILTERS;
+  }
+  list.forEach(function (f) {
+    var cur = state.mode === 'pod' ? state.ptopic : state.filter;
     var c = document.createElement('button');
     c.type = 'button'; c.className = 'chip'; c.textContent = f[LANG] || f.ru;
-    c.setAttribute('aria-pressed', f.id === state.filter ? 'true' : 'false');
+    c.setAttribute('aria-pressed', f.id === cur ? 'true' : 'false');
     c.addEventListener('click', function () {
-      state.filter = f.id; state.q = ''; elQ.value = '';
+      if (state.mode === 'pod') { state.ptopic = f.id; state.pshow = null; }
+      else { state.filter = f.id; }
+      state.q = ''; elQ.value = '';
       var all = box.querySelectorAll('.chip'), i;
       for (i = 0; i < all.length; i++) all[i].setAttribute('aria-pressed', 'false');
       c.setAttribute('aria-pressed', 'true');
@@ -563,9 +780,8 @@ audio.addEventListener('stalled', function () { if (!audio.paused && !watchdog) 
     });
     box.appendChild(c);
   });
-})();
+}
 
-elQ.placeholder = t('search');
 var qt = null;
 elQ.addEventListener('input', function () {
   clearTimeout(qt);
@@ -573,18 +789,43 @@ elQ.addEventListener('input', function () {
     var v = elQ.value.trim();
     if (v === state.q) return;
     state.q = v;
-    if (!v) {
-      var all = document.querySelectorAll('.chip'), i;
-      for (i = 0; i < all.length; i++) {
-        all[i].setAttribute('aria-pressed', FILTERS[i].id === state.filter ? 'true' : 'false');
-      }
+    if (state.mode === 'pod') state.pshow = null;   /* ищем по шоу, а не внутри открытого */
+    if (v) {
+      /* идёт поиск - ни один фильтр не активен, и вид не должен утверждать обратное */
+      var all = $('chips').querySelectorAll('.chip'), i;
+      for (i = 0; i < all.length; i++) all[i].setAttribute('aria-pressed', 'false');
     } else {
-      var a2 = document.querySelectorAll('.chip'), j;
-      for (j = 0; j < a2.length; j++) a2[j].setAttribute('aria-pressed', 'false');
+      paintChips();                                /* вернулись к фильтру - он снова нажат */
     }
     load();
   }, 400);                                    /* каталог чужой, дёргать на каждую букву невежливо */
 });
+
+/* ═══ ВЕРСИЯ И КЭШ ВЕБВЬЮ ═══════════════════════════════════════════════════════════
+   Вебвью Телеграма держит страницу в кэше, и человек после деплоя видит СТАРОЕ - решает,
+   что правки не доехали (живой случай Ren). Сверяем свой вшитый хэш с version.txt рядом
+   и перезагружаемся ОДИН раз при расхождении.
+   Защита от цикла обязательна: если version.txt почему-то всегда отличается (не доложили
+   при деплое, отдаётся не тот файл), без флага страница перезагружалась бы вечно. */
+var VERSION = 'c7814fc04076';
+
+(function checkVersion() {
+  if (VERSION.indexOf('{{') === 0) return;          /* не задеплоено - сверять не с чем */
+  var KEY = 'hara_radio_reloaded';
+  fetch('version.txt?t=' + VERSION, { cache: 'no-store' }).then(function (r) {
+    return r.ok ? r.text() : null;
+  }).then(function (v) {
+    if (!v) return;
+    v = v.trim();
+    if (!v || v === VERSION) { try { sessionStorage.removeItem(KEY); } catch (e) {} return; }
+    var once = null;
+    try { once = sessionStorage.getItem(KEY); } catch (e) {}
+    if (once === v) { console.log('версия ' + v + ' не подхватилась перезагрузкой'); return; }
+    try { sessionStorage.setItem(KEY, v); } catch (e) {}
+    console.log('страница устарела (' + VERSION + ' -> ' + v + '), перезагружаюсь');
+    location.reload();
+  }).catch(function () { /* нет сети - работаем тем, что есть */ });
+})();
 
 /* ═══ СТАРТ ═══ */
 applyTheme();
@@ -607,7 +848,12 @@ document.documentElement.lang = LANG;
   } catch (e) {}
 })();
 
+paintTabs();
+paintChips();
 load();
+/* каталог подкастов подтягивается ФОНОМ: радио обязано открыться сразу, а вкладка
+   появится, когда файл доедет (или не появится вовсе, если его нет) */
+loadPodCatalog();
 })();
 </script>
 </body>
