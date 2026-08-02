@@ -78,6 +78,35 @@
   #bst.err { color: var(--danger); white-space: normal; overflow: visible; }
   #vol { flex: 0 0 92px; accent-color: var(--accent); }
   #vol.off { display: none; }        /* iOS: громкость только системная, мёртвый ползунок не показываем */
+  /* ОБЛОЖКА. Квадрат со скруглением, буква по центру - если логотипа нет или он битый.
+     Размер задаётся в коде: один и тот же элемент служит и списку, и плееру. */
+  .ava {
+    flex: 0 0 auto; border-radius: 9px; overflow: hidden; background: var(--line);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--hint); font-weight: 700; font-size: 17px; line-height: 1;
+  }
+  .ava img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  /* ПОЛНОЭКРАННЫЙ ПЛЕЕР. Мини-бар остаётся для переключения станций, а сюда человек
+     заходит «послушать»: большая обложка, крупное имя, состояние словами. */
+  #full {
+    position: fixed; inset: 0; z-index: 20; background: var(--bg);
+    display: none; flex-direction: column; align-items: center;
+    padding: 24px 20px calc(24px + var(--safe-b)); text-align: center;
+  }
+  #full.on { display: flex; }
+  #fclose {
+    align-self: flex-start; background: none; border: 0; color: var(--hint);
+    font-size: 28px; line-height: 1; padding: 4px 10px; cursor: pointer;
+  }
+  #fava { margin: 6vh auto 28px; box-shadow: 0 10px 40px rgba(0,0,0,.45); }
+  #fnm { font-size: 21px; font-weight: 700; margin-bottom: 8px; }
+  #fst { color: var(--hint); font-size: 15px; min-height: 22px; }
+  #fst.err { color: var(--danger); }
+  #fplay {
+    margin-top: 32px; width: 76px; height: 76px; border-radius: 50%; border: 0;
+    background: var(--accent); color: var(--accent-fg); font-size: 30px; cursor: pointer;
+  }
+  #fmeta { color: var(--hint); font-size: 13px; margin-top: 18px; }
   .hidden { display: none !important; }
 </style>
 </head>
@@ -94,9 +123,19 @@
 </main>
 
 <div id="bar">
+  <div id="bava" class="ava" style="width:44px;height:44px"></div>
   <button id="play" type="button">▶</button>
   <div id="meta"><div id="bnm"></div><div id="bst"></div></div>
   <input id="vol" type="range" min="0" max="1" step="0.05" value="1">
+</div>
+
+<div id="full">
+  <button id="fclose" type="button" aria-label="закрыть">⌄</button>
+  <div id="fava" class="ava" style="width:min(62vw,260px);height:min(62vw,260px)"></div>
+  <div id="fnm"></div>
+  <div id="fst"></div>
+  <button id="fplay" type="button">▶</button>
+  <div id="fmeta"></div>
 </div>
 
 <audio id="a" preload="none"></audio>
@@ -139,6 +178,8 @@ var STR = {
   down_b:    { ru: 'Это сторона radio-browser, не твоя. Можно попробовать ещё раз.',
                en: 'That is radio-browser side, not yours. You can try again.' },
   retry:     { ru: 'Ещё раз',                  en: 'Try again' },
+  ms_artist: { ru: 'Радио · Гробовщик',        en: 'Radio · The Undertaker' },
+  kbps:      { ru: '{n} кбит/с',               en: '{n} kbps' },
   ready:     { ru: 'готово, жми ▶',            en: 'ready, hit ▶' },
   conn:      { ru: 'соединяюсь...',            en: 'connecting...' },
   playing:   { ru: 'играет',                   en: 'on air' },
@@ -179,6 +220,9 @@ var LS_VOL = 'hara_radio_vol';
 
 var $ = function (id) { return document.getElementById(id); };
 var elList = $('list'), elNote = $('note'), elBar = $('bar'), elPlay = $('play');
+var elFull = $('full'), elFava = $('fava'), elFnm = $('fnm'), elFst = $('fst');
+var elBava = $('bava');
+var elFplay = $('fplay'), elFmeta = $('fmeta');
 var elNm = $('bnm'), elSt = $('bst'), elVol = $('vol'), elQ = $('q');
 var audio = $('a');
 
@@ -203,9 +247,16 @@ function stationOf(row) {
   /* MIXED CONTENT: страница на https, и http-поток браузер заблокирует молча. Такую
      станцию честнее не показывать, чем показать неиграющей. */
   if (url.slice(0, 8) !== 'https://') return null;
+  /* ОБЛОЖКА - ТОЛЬКО https и только если она вообще есть. Тот же mixed content, что у
+     потока: http-картинку браузер молча заблокирует, и вместо логотипа будет дырка.
+     Мёртвую ссылку ловим уже в разметке (onerror -> буква), потому что «битая картинка»
+     у radio-browser встречается чаще, чем хотелось бы. */
+  var ico = (row.favicon || '').trim();
+  if (ico.slice(0, 8) !== 'https://') ico = '';
   return { id: (row.stationuuid || '').slice(0, 36), name: (row.name || '?').trim().slice(0, 60),
            url: url, country: (row.countrycode || '').toUpperCase().slice(0, 2),
-           bitrate: parseInt(row.bitrate, 10) || 0, tags: (row.tags || '').slice(0, 60) };
+           bitrate: parseInt(row.bitrate, 10) || 0, tags: (row.tags || '').slice(0, 60),
+           icon: ico };
 }
 
 function load() {
@@ -265,6 +316,27 @@ function showNote(head, body, retry) {
   }
 }
 
+function avatar(st, size) {
+  /* Обложка станции или буква её имени. ОДНА функция на список и на плеер: две копии
+     правила «как выглядит станция без логотипа» однажды разойдутся. */
+  var box = document.createElement('div');
+  box.className = 'ava';
+  box.style.width = box.style.height = size + 'px';
+  if (st.icon) {
+    var img = document.createElement('img');
+    img.src = st.icon;
+    img.alt = '';
+    img.loading = 'lazy';
+    /* битая обложка не должна оставлять дырку: молча уступаем место букве */
+    img.onerror = function () { img.remove(); box.textContent = (st.name[0] || '?').toUpperCase(); };
+    box.appendChild(img);
+  } else {
+    box.textContent = (st.name[0] || '?').toUpperCase();
+  }
+  return box;
+}
+
+
 function render() {
   elNote.className = 'note hidden';
   elList.innerHTML = '';
@@ -279,6 +351,7 @@ function render() {
     var b = document.createElement('button');
     b.type = 'button'; b.className = 'row';
     if (state.cur && state.cur.id === st.id) b.setAttribute('aria-current', 'true');
+    b.appendChild(avatar(st, 40));
     var nm = document.createElement('div'); nm.className = 'nm';
     var t1 = document.createElement('div'); t1.className = 't1'; t1.textContent = st.name;
     var t2 = document.createElement('div'); t2.className = 't2';
@@ -303,9 +376,58 @@ function render() {
 var watchdog = null;
 
 function say(msg, err) {
+  /* ОДНА функция на оба экрана: мини-бар и полноэкранный обязаны говорить одно и то же.
+     Две копии «текущего состояния» разойдутся ровно тогда, когда станция отвалится. */
   elSt.textContent = msg;
   elSt.className = err ? 'err' : '';
+  elFst.textContent = msg;
+  elFst.className = err ? 'err' : '';
 }
+
+
+/* ═══ MEDIA SESSION: обложка и кнопки на локскрине ═══════════════════════════════════
+   Где поддерживается (Android/Chrome) - сильно меняет ощущение: станция выглядит как
+   музыка в системном плеере. Где нет (iOS-вебвью ограничен) - НИЧЕГО не ломается: весь
+   блок под проверкой наличия и под try. Это ожидаемое ограничение платформы, а не баг,
+   и обещать локскрин везде мы не будем. */
+function mediaMeta(st) {
+  if (!('mediaSession' in navigator)) return false;
+  try {
+    var art = [];
+    if (st && st.icon) art = [{ src: st.icon, sizes: '512x512', type: 'image/png' }];
+    navigator.mediaSession.metadata = new window.MediaMetadata({
+      title: (st && st.name) || 'Radio',
+      artist: t('ms_artist'),
+      album: (st && st.country) || '',
+      artwork: art
+    });
+    return true;
+  } catch (e) {
+    console.log('media session meta: ' + e);
+    return false;
+  }
+}
+
+
+function mediaState(playing) {
+  if (!('mediaSession' in navigator)) return;
+  try { navigator.mediaSession.playbackState = playing ? 'playing' : 'paused'; }
+  catch (e) {}
+}
+
+
+(function mediaActions() {
+  if (!('mediaSession' in navigator)) return;
+  /* Каждый обработчик ставится ОТДЕЛЬНО: набор поддерживаемых действий у клиентов
+     разный, и один неизвестный не должен уносить остальные (throws TypeError). */
+  var acts = [['play', function () { if (state.cur) start(); }],
+              ['pause', function () { stopWatch(); audio.pause(); }],
+              ['stop', function () { stopWatch(); audio.pause(); }]];
+  for (var i = 0; i < acts.length; i++) {
+    try { navigator.mediaSession.setActionHandler(acts[i][0], acts[i][1]); }
+    catch (e) { console.log('media session ' + acts[i][0] + ': не поддержан'); }
+  }
+})();
 
 function stopWatch() { if (watchdog) { clearTimeout(watchdog); watchdog = null; } }
 
@@ -315,7 +437,8 @@ function dead() {
      по времени: не заиграло за 12 секунд - значит не заиграет. */
   stopWatch();
   try { audio.pause(); } catch (e) {}
-  elPlay.textContent = '▶';
+  setPlayIcon('▶');
+  mediaState(false);
   say(t('dead'), true);
   markRow();
 }
@@ -329,20 +452,38 @@ function markRow() {
   }
 }
 
+function paintFull(st) {
+  /* Полноэкранный собирается ИЗ ТОЙ ЖЕ станции, что и мини-бар: он не хранит своего
+     состояния и потому не может с ним разойтись. */
+  elFava.innerHTML = '';
+  var a = avatar(st, 0);
+  a.removeAttribute('style');
+  a.style.width = a.style.height = '100%';
+  elFava.appendChild(a);
+  elFnm.textContent = st.name;
+  elFmeta.textContent = [st.country, st.bitrate ? t('kbps').replace('{n}', st.bitrate) : '',
+                         st.tags].filter(Boolean).join(' · ');
+}
+
+
 function pick(st, autoplay) {
   state.cur = st;
   elBar.className = 'on';
   elNm.textContent = st.name;
+  elBava.innerHTML = '';
+  elBava.appendChild(avatar(st, 44));
+  paintFull(st);
+  mediaMeta(st);
   try { localStorage.setItem(LS_LAST, JSON.stringify(st)); } catch (e) {}
   audio.src = st.url;
   markRow();
-  if (autoplay) { start(); } else { say(t('ready')); elPlay.textContent = '▶'; }
+  if (autoplay) { start(); } else { say(t('ready')); setPlayIcon('▶'); }
 }
 
 function start() {
   if (!state.cur) return;
   say(t('conn'));
-  elPlay.textContent = '❚❚';
+  setPlayIcon('❚❚');
   stopWatch();
   watchdog = setTimeout(dead, 12000);
   var p;
@@ -350,7 +491,7 @@ function start() {
   if (p && p.catch) {
     p.catch(function (err) {
       stopWatch();
-      elPlay.textContent = '▶';
+      setPlayIcon('▶');
       /* NotAllowedError = автоплей заблокирован (iOS требует ПЕРВЫЙ play по тапу).
          Это не поломка станции, и говорить «станция не отвечает» тут нельзя. */
       if (err && err.name === 'NotAllowedError') { say(t('ready')); } else { dead(); }
@@ -358,13 +499,34 @@ function start() {
   }
 }
 
+$('meta').addEventListener('click', function () {
+  if (state.cur) elFull.className = 'on';
+});
+$('bava').addEventListener('click', function () {
+  if (state.cur) elFull.className = 'on';
+});
+$('fclose').addEventListener('click', function () { elFull.className = ''; });
+elFplay.addEventListener('click', function () {
+  if (!state.cur) return;
+  if (audio.paused) { start(); } else { stopWatch(); audio.pause(); }
+});
+
 elPlay.addEventListener('click', function () {
   if (!state.cur) return;
   if (audio.paused) { start(); } else { stopWatch(); audio.pause(); }
 });
 
-audio.addEventListener('playing', function () { stopWatch(); elPlay.textContent = '❚❚'; say(t('playing')); markRow(); });
-audio.addEventListener('pause', function () { stopWatch(); elPlay.textContent = '▶'; say(t('paused')); markRow(); });
+function setPlayIcon(icon) {
+  elPlay.textContent = icon;
+  elFplay.textContent = icon;
+}
+
+audio.addEventListener('playing', function () {
+  stopWatch(); setPlayIcon('❚❚'); say(t('playing')); mediaState(true); markRow();
+});
+audio.addEventListener('pause', function () {
+  stopWatch(); setPlayIcon('▶'); say(t('paused')); mediaState(false); markRow();
+});
 audio.addEventListener('error', dead);
 audio.addEventListener('stalled', function () { if (!audio.paused && !watchdog) watchdog = setTimeout(dead, 12000); });
 
