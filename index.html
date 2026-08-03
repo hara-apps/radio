@@ -15,11 +15,18 @@
     --safe-b: env(safe-area-inset-bottom, 0px);
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { margin: 0; height: 100%; }
+  html, body { margin: 0; }
+  html { height: 100%; }
   body {
     background: var(--bg); color: var(--fg);
     font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     display: flex; flex-direction: column;
+    /* MIN-height, А НЕ height. Липкий элемент прибит к своему КОНТЕЙНЕРУ, и при
+       height:100% контейнером была ровно высота экрана: шапка держалась первые ~370px
+       прокрутки, а дальше уезжала вместе со списком (замер в браузере). Отсюда и брался
+       наезд на чипы. min-height оставляет колонку на весь экран при коротком списке и
+       не режет прилипание при длинном. */
+    min-height: 100%;
     /* место под плеер: он приклеен снизу и не должен накрывать последнюю станцию */
     padding-bottom: calc(92px + var(--safe-b));
   }
@@ -41,7 +48,18 @@
     background: var(--card); color: var(--fg); font-size: 16px;  /* 16px = iOS не зумит */
   }
   #q::placeholder { color: var(--hint); }
-  .chips { display: flex; gap: 6px; overflow-x: auto; padding: 8px 12px 4px; scrollbar-width: none; }
+  /* ЧИПЫ ЖИВУТ ВНУТРИ ЛИПКОЙ ШАПКИ, а не под ней. Живой баг: ряд стоял отдельным блоком
+     в обычном потоке, шапка липкая с непрозрачным фоном и z-index 5 - на первом же
+     касании списка чипы уезжали ПОД неё, и от них оставалась нижняя половина. Чинить это
+     подбором отступов бессмысленно: пока элемент прокручивается, а сосед прибит, они
+     будут наезжать при любой высоте. Внутри шапки прокручивать нечему.
+     Отрицательные поля - чтобы ряд шёл от края до края (иначе не видно, что он листается),
+     при этом внутренний отступ повторяет шапку и первый чип стоит вровень с поиском. */
+  .chips {
+    display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;
+    margin: 8px -12px 0; padding: 0 12px 2px;
+  }
+  .chips:empty { display: none; }
   .chips::-webkit-scrollbar { display: none; }
   .chip {
     flex: 0 0 auto; padding: 7px 13px; border-radius: 999px; background: var(--card);
@@ -49,6 +67,17 @@
     user-select: none; min-height: 34px;
   }
   .chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+  /* ВСТРОЕННЫЙ ПЛЕЕР YOUTUBE. Показывается ЦЕЛИКОМ и на виду - это условие их правил, а
+     не наш вкус: прятать плеер, гонять его за экраном или подменять «фоном» из тихого
+     <audio> значит обходить Premium и нарушать условия. Поэтому он живёт прямо под
+     шапкой, на своём месте, и всё, что играет с ютуба, играет ЗДЕСЬ. */
+  #ytbox { display: none; padding: 6px 12px 4px; }
+  #ytbox.on { display: block; }
+  #ytwrap {
+    position: relative; width: 100%; padding-top: 56.25%;   /* 16:9 без скачков высоты */
+    border-radius: 12px; overflow: hidden; background: #000;
+  }
+  #ytwrap iframe, #ytwrap > div { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
   main { flex: 1 1 auto; padding: 4px 12px 12px; }
   .row {
     display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
@@ -100,17 +129,21 @@
   .ava img { width: 100%; height: 100%; object-fit: cover; display: block; }
   /* ПОЛНОЭКРАННЫЙ ПЛЕЕР. Мини-бар остаётся для переключения станций, а сюда человек
      заходит «послушать»: большая обложка, крупное имя, состояние словами. */
+  /* ПРОКРУЧИВАЕТСЯ. Экран фиксированной высоты, а содержимого прибавилось (две группы
+     действий со своими подписями) - на 320x568 нижний ряд уезжал ЗА экран и не нажимался
+     вовсе. Поймано браузерным прогоном: клик по ⏺ упирался в <html>. */
   #full {
     position: fixed; inset: 0; z-index: 20; background: var(--bg);
     display: none; flex-direction: column; align-items: center;
-    padding: 24px 20px calc(24px + var(--safe-b)); text-align: center;
+    padding: 16px 20px calc(24px + var(--safe-b)); text-align: center;
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
   }
   #full.on { display: flex; }
   #fclose {
     align-self: flex-start; background: none; border: 0; color: var(--hint);
     font-size: 28px; line-height: 1; padding: 4px 10px; cursor: pointer;
   }
-  #fava { margin: 6vh auto 28px; box-shadow: 0 10px 40px rgba(0,0,0,.45); }
+  #fava { margin: 3vh auto 20px; box-shadow: 0 10px 40px rgba(0,0,0,.45); }
   #fnm { font-size: 21px; font-weight: 700; margin-bottom: 8px; }
   #fst { color: var(--hint); font-size: 15px; min-height: 22px; }
   #fst.err { color: var(--danger); }
@@ -120,15 +153,32 @@
   }
   #fmeta { color: var(--hint); font-size: 13px; margin-top: 18px; }
   /* РЯД ДЕЙСТВИЙ. Живёт в полноэкранном плеере: там есть место под палец, и человек,
-     который «слушает», уже там. В мини-баре его нет намеренно - он и так плотный. */
-  #acts { display: none; gap: 8px; margin-top: 20px; flex-wrap: wrap; justify-content: center; }
+     который «слушает», уже там. В мини-баре его нет намеренно - он и так плотный.
+     ДВЕ ГРУППЫ, РАЗДЕЛЁННЫЕ ЧЕРТОЙ, потому что у них РАЗНОЕ ПОВЕДЕНИЕ: верхняя
+     запоминает вкус на месте и музыку не трогает, нижняя уводит в чат. Одинаковые с виду
+     кнопки с разной ценой тапа - это ловушка: человек жмёт 👍 и внезапно оказывается в
+     переписке. Подпись у каждой группы своя. */
+  #acts { display: none; flex-direction: column; align-items: center; gap: 6px; margin-top: 20px; }
   #acts.on { display: flex; }
-  #acts button {
+  .arow { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .arow button {
     min-width: 56px; min-height: 44px; padding: 8px 12px; border-radius: 10px;
     border: 1px solid var(--line); background: var(--card); color: var(--fg);
     font: inherit; font-size: 18px; cursor: pointer;
   }
-  #acts button:active { background: var(--accent); color: var(--accent-fg); }
+  .arow button:active { background: var(--accent); color: var(--accent-fg); }
+  /* отмеченное видно СРАЗУ и остаётся видным: сигнал записан локально, и кнопка обязана
+     это показывать, не дожидаясь бота */
+  .arow button[aria-pressed="true"] {
+    background: var(--accent); color: var(--accent-fg); border-color: var(--accent);
+  }
+  .anote { color: var(--hint); font-size: 12px; max-width: 320px; line-height: 1.35; }
+  .astat { color: var(--hint); font-size: 12px; min-height: 16px; margin-top: 4px; }
+  .agap { width: min(100%, 240px); border-top: 1px solid var(--line); margin: 10px 0 4px; }
+  /* ряд действий под роликом: тот же набор, но на своём месте - полноэкранный экран
+     накрыл бы плеер, а прятать его нельзя */
+  #ytacts { display: none; flex-direction: column; align-items: center; gap: 6px; margin-top: 8px; }
+  #ytacts.on { display: flex; }
   #actnote { color: var(--hint); font-size: 12px; margin-top: 10px; min-height: 16px; }
   /* ПЕРЕМОТКА. Живёт по признаку КОНЕЧНОЙ длительности, а не по номеру вкладки: у
      эфира duration = Infinity, и перематывать там физически нечего. Признак берётся у
@@ -145,8 +195,13 @@
 <header>
   <div id="tabs"></div>
   <input id="q" type="search" autocomplete="off" autocorrect="off" spellcheck="false">
+  <div class="chips" id="chips"></div>
 </header>
-<div class="chips" id="chips"></div>
+
+<div id="ytbox">
+  <div id="ytwrap"><div id="ytp"></div></div>
+  <div id="ytacts"></div>
+</div>
 
 <main>
   <div id="list"></div>
@@ -172,7 +227,6 @@
   <button id="fplay" type="button">▶</button>
   <div id="fmeta"></div>
   <div id="acts"></div>
-  <div id="actnote"></div>
 </div>
 
 <audio id="a" preload="none"></audio>
@@ -272,6 +326,26 @@ var STR = {
   tab_radio2: { ru: 'Радио',                    en: 'Radio' },
   tab_pod2:  { ru: 'Подкасты',                  en: 'Podcasts' },
   m_search:  { ru: 'Поиск трека в подборке',    en: 'Search the selection' },
+  /* ── YOUTUBE. Поиска здесь нет и быть не может: ключ подписывает каждый запрос, а
+     страница лежит статикой - положить ключ в неё значит его опубликовать. Поэтому чарт
+     приезжает снимком, а живой поиск идёт в чате, и это сказано прямо. */
+  yt_chart:  { ru: '🔥 Сейчас слушают',          en: '🔥 Trending now' },
+  yt_disc:   { ru: '💿 Открытия',                en: '💿 Discoveries' },
+  yt_note:   { ru: 'Играет плеером YouTube и только пока аппка открыта: в фоне и с ' +
+                   'выключенным экраном звука не будет. Это их правила, не наша недоделка.',
+               en: 'Plays in the YouTube player and only while the app is open: no ' +
+                   'background or screen-off audio. Their rules, not our shortcoming.' },
+  yt_built:  { ru: 'Чарт собран {d}. Живой поиск по YouTube идёт в чате у Гробовщика.',
+               en: 'Chart built {d}. Live YouTube search is in the chat with the Undertaker.' },
+  /* ОТКАЗЫ ПЛЕЕРА РАЗНЫЕ ПО СМЫСЛУ, И ПУТАТЬ ИХ НЕЛЬЗЯ: «владелец запретил встраивание»
+     чинится открытием на ютубе, а «ролика больше нет» не чинится вовсе. */
+  yt_e_gone: { ru: 'Ролик удалён или закрыт владельцем.',
+               en: 'The video was removed or made private.' },
+  yt_e_emb:  { ru: 'Владелец запретил встраивать этот ролик. Открыть на YouTube можно ' +
+                   'кнопкой в чате у Гробовщика.',
+               en: 'The owner disabled embedding for this video. Open it on YouTube with ' +
+                   'the button in the chat.' },
+  yt_e_bad:  { ru: 'Этот ролик не открылся.',    en: 'This video did not open.' },
   b_search:  { ru: 'Поиск книги в каталоге',    en: 'Search the catalog' },
   m_empty_h: { ru: 'Треков не нашлось',         en: 'No tracks found' },
   m_empty_b: { ru: 'Попробуй другой жанр. Поиск по всей библиотеке идёт в чате.',
@@ -293,13 +367,30 @@ var STR = {
   a_like:    { ru: 'Нравится',                  en: 'Like' },
   a_no:      { ru: 'Не нравится',                en: 'Dislike' },
   a_star:    { ru: 'В избранное',                en: 'To favourites' },
-  a_rec:     { ru: 'Записать кусок',             en: 'Record a piece' },
+  a_rec:     { ru: 'Забрать кусок файлом',       en: 'Get a piece as a file' },
   a_dj:      { ru: 'Диджей',                     en: 'DJ' },
-  /* ЧЕСТНО ПРО ПЕРЕХОД: любое действие уходит боту через Telegram, и плеер на секунду
-     свернётся. Сказать это заранее дешевле, чем оставить человека гадать, куда его унесло. */
-  a_hint:    { ru: 'Уйдёт боту в чат, плеер свернётся на секунду',
-               en: 'Goes to the bot in the chat, the player folds away for a second' },
+  a_sync:    { ru: 'Отправить боту',             en: 'Send to the bot' },
+  /* ДВЕ ГРУППЫ - ДВЕ ПОДПИСИ. Верхняя ничего не прерывает, нижняя уводит в чат, и это
+     сказано ДО тапа, а не выясняется после него. */
+  a_hint1:   { ru: 'Запоминаю на месте. Музыка играет, никуда не уходим.',
+               en: 'Saved right here. The music keeps playing, no navigation.' },
+  a_hint2:   { ru: 'Уводит в чат: файл и подборка приходят туда. Плеер свернётся, ' +
+                   'вернёт кнопка «↩️ Вернуться в плеер».',
+               en: 'Takes you to the chat: the file and the set arrive there. The player ' +
+                   'folds away, the "↩️ Back to the player" button brings it back.' },
+  a_saved:   { ru: 'Запомнил: {x}',              en: 'Saved: {x}' },
   a_sent:    { ru: 'Отправил боту',              en: 'Sent to the bot' },
+  /* СКОЛЬКО ЖДЁТ ОТПРАВКИ. Копится локально, потому что каждая отправка это переход в
+     чат: копить сигналы можно, прерывать музыку на каждый тап - нет. */
+  a_queue:   { ru: 'Ждут отправки: {n}',         en: 'Waiting to be sent: {n}' },
+  a_left:    { ru: 'Ушло {n}, осталось {k} - тапни ещё раз',
+               en: 'Sent {n}, {k} left - tap again' },
+  /* ПОТОЛОК ЧУЖОЙ И НАЗЫВАЕТСЯ: в ссылку-команду Telegram пускает 64 символа, и пачка
+     больше двух сигналов в неё физически не влезает. */
+  a_nolink:  { ru: 'Этот Telegram не умеет открывать чат из аппки (версия {v}). ' +
+                   'Отметки сохранены, отправятся из более новой версии.',
+               en: 'This Telegram cannot open the chat from a Mini App (version {v}). ' +
+                   'Your marks are saved and will be sent from a newer version.' },
   fav_tab:   { ru: '⭐ Избранное',                en: '⭐ Favourites' },
   fav_empty_h: { ru: 'Избранного нет',            en: 'No favourites' },
   fav_empty_b: { ru: 'Открой станцию и жми «В избранное» тут или в чате.',
@@ -340,7 +431,11 @@ var SECTIONS = [
   { id: 'radio', tab: 'tab_radio2', kind: 'live' },
   { id: 'pod',   tab: 'tab_pod2',   kind: 'cat',  file: 'podcasts.json',
     ph: 'search', artist: 'ms_pod',  back: 'p_back', units: ['p_eps_1', 'p_eps_2', 'p_eps_5'] },
-  { id: 'music', tab: 'tab_music',  kind: 'flat', file: 'music.json',
+  /* МУЗЫКА - ДВА ИСТОЧНИКА С РАЗНОЙ ПРИРОДОЙ, И ЭТО ВИДНО ЧИПАМИ. У ютуба есть мейнстрим,
+     но играет он ТОЛЬКО их встроенным плеером (и у нас не остаётся ни байта); у свободной
+     музыки есть прямая ссылка на файл, зато нет мейнстрима. Слить их в один список значит
+     сделать одинаковые с виду строки, играющие по-разному. */
+  { id: 'music', tab: 'tab_music',  kind: 'yt',   file: 'youtube.json', alt: 'music.json',
     ph: 'm_search', artist: 'ms_music' },
   { id: 'book',  tab: 'tab_book',   kind: 'cat',  file: 'books.json',
     ph: 'b_search', artist: 'ms_book', back: 'b_back',
@@ -433,6 +528,15 @@ function epItem(sh, ep, sec) {
            sub: [ep.sec ? mmss(ep.sec) : '', sh.title].filter(Boolean).join(' · ') };
 }
 
+function ytItem(tr) {
+  /* РОЛИК В ТОЙ ЖЕ ФОРМЕ, ЧТО СТАНЦИЯ И ВЫПУСК, но с полем yt вместо url: по нему весь
+     плеер и отличает «это играет ютуб» от «это играет наш <audio>». Признак у САМОГО
+     объекта, а не «в каком мы разделе»: разделы переключаются, объект нет. */
+  return { id: 'y:' + tr.id, yt: tr.id, name: tr.title, url: '', icon: tr.thumb || '',
+           artist: tr.artist, pod: true, sec: tr.sec || 0,
+           sub: [tr.sec ? mmss(tr.sec) : '', tr.artist].filter(Boolean).join(' · ') };
+}
+
 function trackItem(tr) {
   /* ТРЕК ИГРАЕТ СРАЗУ: второго уровня у него нет, и выдумывать его ради единообразия
      значит заставить человека тапать дважды там, где хватает одного.
@@ -451,14 +555,22 @@ function loadSnapshots() {
      ХЭШ В АДРЕСЕ, А НЕ ТОЛЬКО no-cache: страница и её данные обновляются ОДНИМ деплоем,
      и закэшированный каталог рядом со свежей страницей это тот же «изменений не видно»,
      только тише. Разделы независимы: упавший каталог книг не уносит подкасты. */
-  var jobs = SECTIONS.filter(function (s) { return s.file; }).map(function (sec) {
-    return fetch(sec.file + '?v=' + encodeURIComponent(VERSION), { cache: 'no-cache' })
+  var want = [];
+  SECTIONS.forEach(function (sec) {
+    if (sec.file) want.push([sec.id, sec.file, sec.kind]);
+    /* ВТОРОЙ ИСТОЧНИК РАЗДЕЛА ГРУЗИТСЯ ОТДЕЛЬНО И НЕЗАВИСИМО: не собрался чарт ютуба -
+       остаются «Открытия», не собрались они - остаётся чарт. Раздел исчезает целиком
+       только когда нет НИ ОДНОГО источника. */
+    if (sec.alt) want.push(['disc', sec.alt, 'flat']);
+  });
+  var jobs = want.map(function (w) {
+    return fetch(w[1] + '?v=' + encodeURIComponent(VERSION), { cache: 'no-cache' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (j) {
         if (!j) return;
-        var rows = sec.kind === 'flat' ? j.tracks : j.shows;
+        var rows = (w[2] === 'cat') ? j.shows : j.tracks;
         if (!rows || !rows.length) return;
-        DATA[sec.id] = j;
+        DATA[w[0]] = j;
       })
       .catch(function () { /* нет файла - раздела просто не будет */ });
   });
@@ -467,6 +579,10 @@ function loadSnapshots() {
     /* ЭКРАН ИЗ ССЫЛКИ ОТКРЫВАЕТСЯ ПОСЛЕ ЗАГРУЗКИ КАТАЛОГОВ, а не до: до неё вкладки ещё
        нет, и переключаться было бы некуда. */
     openScreen(qp('screen'));
+    /* РОЛИК ИЗ ССЫЛКИ ставится ПОСЛЕ экрана и НЕЗАВИСИМО от него: снимок чарта мог не
+       собраться (нет ключа, кончилась квота), а кнопка из чата обязана работать всё
+       равно - она несёт всё, что нужно для воспроизведения, в самой ссылке. */
+    fromLinkVideo();
   });
 }
 
@@ -483,8 +599,18 @@ function openScreen(scr) {
     /* имена вкладок в ссылке человеческие (podcasts/books/music), внутри короткие */
     if (SECTIONS[i].id === scr || SECTIONS[i].file === scr + '.json') { sec = SECTIONS[i]; break; }
   }
-  if (!sec || !DATA[sec.id]) return;      /* каталога нет - молча остаёмся на радио */
+  if (!sec || !(DATA[sec.id] || (sec.alt && DATA.disc))) return;   /* каталога нет - остаёмся на радио */
   switchTo(sec.id);
+}
+
+function fromLinkVideo() {
+  /* РОЛИК ИЗ ССЫЛКИ. Кнопка «▶️ Слушать в плеере» под карточкой в чате несёт id: человек
+     нашёл ролик разговором с ботом, а слушает здесь. Ролика может не быть в снимке чарта
+     (снимок это чарт, а нашли что угодно), поэтому строим объект ИЗ САМОЙ ССЫЛКИ, а не
+     ищем его в каталоге - иначе кнопка работала бы только для десятка популярных. */
+  var v = (qp('yt') || '').slice(0, 11);
+  if (!/^[A-Za-z0-9_-]{11}$/.test(v)) return;
+  pick(ytItem({ id: v, title: qp('t') || v, artist: '', sec: 0, thumb: '' }), true);
 }
 
 var LS_FAV = 'hara_fav_ids';
@@ -543,8 +669,21 @@ function loadSection() {
      «отфильтровать по теме, отфильтровать по поиску, отрисовать» разошлись бы на первой
      же правке. Сети тут нет вовсе: снимок уже в памяти. */
   var sec = section(state.mode), snap = DATA[sec.id];
-  if (!snap) { state.items = []; render(); return; }
   var q = state.q.toLowerCase();
+
+  if (sec.kind === 'yt') {                         /* музыка: ютуб или открытия */
+    var topic = state.ptopic || (DATA.music ? 'chart' : 'disc');
+    var src = (topic === 'disc') ? DATA.disc : DATA.music;
+    var rows = ((src || {}).tracks || []).filter(function (tr) {
+      if (!q) return true;
+      return ((tr.title || '') + ' ' + (tr.artist || '')).toLowerCase().indexOf(q) >= 0;
+    });
+    state.items = rows.map(topic === 'disc' ? trackItem : ytItem);
+    render();
+    return;
+  }
+
+  if (!snap) { state.items = []; render(); return; }
 
   if (sec.kind === 'flat') {                       /* музыка: трек играет сразу */
     state.items = (snap.tracks || []).filter(function (tr) {
@@ -658,6 +797,13 @@ function avatar(st, size) {
 }
 
 
+/* ЧЕМ СТРОКА ИГРАЕТ - СВОЙСТВО СТРОКИ, А НЕ РАЗДЕЛА. У станции и выпуска это url, у
+   ролика YouTube - id для их плеера; «первая строка списка выпусков» не играет вовсе, и
+   различать это признаком раздела значило бы запускать возврат назад. */
+function playable(st) { return !!(st && (st.url || st.yt)); }
+
+function nowPlaying() { return state.cur && state.cur.yt ? ytPlaying() : !audio.paused; }
+
 function render() {
   elNote.className = 'note hidden';
   elList.innerHTML = '';
@@ -674,7 +820,7 @@ function render() {
   state.items.forEach(function (st) {
     var b = document.createElement('button');
     b.type = 'button'; b.className = 'row';
-    if (st.url && state.cur && state.cur.id === st.id) b.setAttribute('aria-current', 'true');
+    if (playable(st) && state.cur && state.cur.id === st.id) b.setAttribute('aria-current', 'true');
     b.appendChild(avatar(st, 40));
     var nm = document.createElement('div'); nm.className = 'nm';
     var t1 = document.createElement('div'); t1.className = 't1'; t1.textContent = st.name;
@@ -682,12 +828,13 @@ function render() {
     t2.textContent = st.sub || '';
     nm.appendChild(t1); nm.appendChild(t2);
     var eq = document.createElement('div'); eq.className = 'eq';
-    eq.textContent = (st.url && state.cur && state.cur.id === st.id && !audio.paused) ? '▮▮' : '';
+    eq.textContent = (playable(st) && state.cur && state.cur.id === st.id && nowPlaying())
+      ? '▮▮' : '';
     b.appendChild(nm); b.appendChild(eq);
     /* СТРОКА ЛИБО ИГРАЕТ, ЛИБО ВЕДЁТ. Признак - наличие url у самой строки, а не режим:
        в списке выпусков первая строка это возврат, и она не должна ничего запускать. */
     b.addEventListener('click', function () {
-      if (st.url) { pick(st, true); } else if (st.tap) { st.tap(); }
+      if (playable(st)) { pick(st, true); } else if (st.tap) { st.tap(); }
     });
     frag.appendChild(b);
   });
@@ -700,12 +847,16 @@ function render() {
   } else {
     /* ДАТА СБОРКИ НАЗЫВАЕТСЯ ВСЛУХ: каталог тут снимок, и человек должен понимать,
        насколько он свежий, а не догадываться. Живой поиск честно отправлен в чат. */
-    var _snap = DATA[state.mode] || {}, d = '';
+    /* У МУЗЫКИ ДВА ИСТОЧНИКА И ДВЕ РАЗНЫЕ ДАТЫ СБОРКИ: подпись обязана называть дату
+       ТОГО списка, который человек сейчас видит, иначе она врёт про свежесть. */
+    var _yt = state.mode === 'music' && (state.ptopic || 'chart') !== 'disc';
+    var _snap = (state.mode === 'music' ? (_yt ? DATA.music : DATA.disc)
+                                        : DATA[state.mode]) || {}, d = '';
     try {
       d = _snap.built ? new Date(_snap.built * 1000).toLocaleDateString(
         LANG === 'ru' ? 'ru-RU' : 'en-GB') : '';
     } catch (e) { d = ''; }
-    hint.textContent = d ? t(state.mode === 'music' ? 'm_built' : 'p_built')
+    hint.textContent = d ? t(_yt ? 'yt_built' : (state.mode === 'music' ? 'm_built' : 'p_built'))
       .replace('{d}', d) : '';
   }
   if (hint.textContent) elList.appendChild(hint);
@@ -790,7 +941,7 @@ function markRow() {
   for (i = 0; i < rows.length; i++) {
     var on = state.cur && rows[i].querySelector('.t1').textContent === state.cur.name;
     if (on) { rows[i].setAttribute('aria-current', 'true'); } else { rows[i].removeAttribute('aria-current'); }
-    rows[i].querySelector('.eq').textContent = (on && !audio.paused) ? '▮▮' : '';
+    rows[i].querySelector('.eq').textContent = (on && nowPlaying()) ? '▮▮' : '';
   }
 }
 
@@ -808,6 +959,78 @@ function paintFull(st) {
 }
 
 
+/* ═══ YOUTUBE: ИХ ПЛЕЕР, НАШ ЭКРАН ══════════════════════════════════════════════════
+   ЧТО ЗДЕСЬ ЕСТЬ. Официальный IFrame Player API: мы говорим «покажи вот этот ролик»,
+   дальше всё делает их плеер на их серверах.
+   ЧЕГО ЗДЕСЬ НЕТ И НЕ БУДЕТ (условие Ren, повторено рядом с кодом нарочно): не тянем
+   дорожку, не проксируем поток, не прячем плеер и не подделываем фон тихим <audio>.
+   Первое - пиратство, второе - ретрансляция, третье - обход Premium: за любое из трёх
+   отключают ключ и банят бота, и это правильно.
+   ПОЭТОМУ ЖЕ НЕТ ФОНОВОГО ЗВУКА: свернул аппку - музыка встала. Сказано подписью ПОД
+   плеером, а не выясняется опытным путём. */
+var ytPlayer = null, ytApi = false, ytWant = null;
+
+function ytLoad() {
+  if (ytApi || document.getElementById('ytapi')) return;
+  var s = document.createElement('script');
+  s.id = 'ytapi';
+  s.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(s);
+}
+
+window.onYouTubeIframeAPIReady = function () {
+  ytApi = true;
+  if (ytWant) ytShow(ytWant);
+};
+
+function ytShow(it) {
+  ytWant = it;
+  $('ytbox').className = 'on';
+  if (!ytApi || !window.YT || !window.YT.Player) { ytLoad(); return; }
+  if (!ytPlayer) {
+    ytPlayer = new window.YT.Player('ytp', {
+      videoId: it.yt,
+      /* playsinline - иначе iOS уводит ролик в системный полноэкранный и человек
+         вываливается из аппки; rel:0 - чужие рекомендации в конце нам не нужны */
+      playerVars: { playsinline: 1, rel: 0, modestbranding: 1 },
+      events: { onReady: function (e) { try { e.target.playVideo(); } catch (x) {} },
+                onStateChange: ytState, onError: ytError }
+    });
+    return;
+  }
+  try { ytPlayer.loadVideoById(it.yt); } catch (e) { say(t('yt_e_bad'), true); }
+}
+
+function ytState(e) {
+  var s = e && e.data;
+  if (s === 1) { setPlayIcon('❚❚'); say(t('playing')); }
+  else if (s === 2) { setPlayIcon('▶'); say(t('paused')); }
+  else if (s === 0) { setPlayIcon('▶'); say(t('paused')); }
+  markRow();
+}
+
+function ytError(e) {
+  /* КОДЫ ЗНАЧАТ РАЗНОЕ, И ЧЕЛОВЕКУ НУЖНЫ РАЗНЫЕ СЛОВА: 101 и 150 это «владелец запретил
+     встраивание» (лечится открытием на ютубе), 100 - «ролика больше нет» (не лечится),
+     2 и 5 - «мы прислали ерунду». Один текст на все четыре случая посылал бы человека
+     чинить то, что не сломано. */
+  var c = e && e.data;
+  setPlayIcon('▶');
+  say(c === 100 ? t('yt_e_gone') : ((c === 101 || c === 150) ? t('yt_e_emb') : t('yt_e_bad')),
+      true);
+}
+
+function ytHide() {
+  ytWant = null;
+  $('ytbox').className = '';
+  try { if (ytPlayer && ytPlayer.stopVideo) ytPlayer.stopVideo(); } catch (e) {}
+}
+
+function ytPlaying() {
+  try { return !!(ytPlayer && ytPlayer.getPlayerState && ytPlayer.getPlayerState() === 1); }
+  catch (e) { return false; }
+}
+
 function pick(st, autoplay) {
   state.cur = st;
   elBar.className = 'on';
@@ -815,10 +1038,20 @@ function pick(st, autoplay) {
   elBava.innerHTML = '';
   elBava.appendChild(avatar(st, 44));
   paintFull(st);
-  mediaMeta(st);
   try { localStorage.setItem(LS_LAST, JSON.stringify(st)); } catch (e) {}
-  audio.src = st.url;
   markRow();
+  if (st.yt) {
+    /* ДВА ИСТОЧНИКА ЗВУКА ОДНОВРЕМЕННО - ЭТО КАША, и она случается ровно тогда, когда
+       человек ткнул ролик, слушая радио. Свой поток глушим ЯВНО. */
+    stopWatch();
+    try { audio.pause(); audio.removeAttribute('src'); } catch (e) {}
+    ytShow(st);
+    say(t('conn'));
+    return;
+  }
+  ytHide();
+  mediaMeta(st);
+  audio.src = st.url;
   if (autoplay) { start(); } else { say(t('ready')); setPlayIcon('▶'); }
 }
 
@@ -841,22 +1074,30 @@ function start() {
   }
 }
 
-$('meta').addEventListener('click', function () {
-  if (state.cur) elFull.className = 'on';
-});
-$('bava').addEventListener('click', function () {
-  if (state.cur) elFull.className = 'on';
-});
-$('fclose').addEventListener('click', function () { elFull.className = ''; });
-elFplay.addEventListener('click', function () {
+function toggle() {
+  /* ОДНА КНОПКА НА ДВА ИСТОЧНИКА. Что играет - решает сам объект (поле yt), а не режим:
+     режим переключается, объект нет. */
   if (!state.cur) return;
+  if (state.cur.yt) {
+    if (!ytPlayer) { ytShow(state.cur); return; }
+    try { if (ytPlaying()) { ytPlayer.pauseVideo(); } else { ytPlayer.playVideo(); } }
+    catch (e) { say(t('yt_e_bad'), true); }
+    return;
+  }
   if (audio.paused) { start(); } else { stopWatch(); audio.pause(); }
-});
+}
 
-elPlay.addEventListener('click', function () {
-  if (!state.cur) return;
-  if (audio.paused) { start(); } else { stopWatch(); audio.pause(); }
-});
+/* ПОЛНОЭКРАННЫЙ НЕ ОТКРЫВАЕТСЯ НАД РОЛИКОМ: он накрыл бы плеер YouTube целиком, а прятать
+   его нельзя по их же условиям. Для роликов кнопки действий живут прямо под плеером. */
+function openFull() {
+  if (state.cur && !state.cur.yt) elFull.className = 'on';
+}
+
+$('meta').addEventListener('click', openFull);
+$('bava').addEventListener('click', openFull);
+$('fclose').addEventListener('click', function () { elFull.className = ''; });
+elFplay.addEventListener('click', toggle);
+elPlay.addEventListener('click', toggle);
 
 function setPlayIcon(icon) {
   elPlay.textContent = icon;
@@ -889,63 +1130,274 @@ audio.addEventListener('stalled', function () { if (!audio.paused && !watchdog) 
   });
 })();
 
-/* ═══ ДЕЙСТВИЯ ИЗ ПЛЕЕРА В БОТА ══════════════════════════════════════════════════════
-   ПОЧЕМУ DEEP-LINK, А НЕ sendData. У аппки два способа сказать что-то боту, и ОБА
-   прерывают прослушивание - это свойство платформы, а не наша лень:
+/* ═══ ДЕЙСТВИЯ ИЗ ПЛЕЕРА: ОТМЕТКА НА МЕСТЕ, БОТУ - ПАЧКОЙ ════════════════════════════
+   ПОЧЕМУ ВООБЩЕ DEEP-LINK. У аппки два способа сказать что-то боту, и ОБА прерывают
+   прослушивание - это свойство платформы, а не наша лень:
      sendData    - работает ТОЛЬКО у аппки, открытой кнопкой reply-клавиатуры, и по
-                   контракту ЗАКРЫВАЕТ аппку. Плюс нам пришлось бы сменить способ
-                   открытия, потеряв параметры ссылки (screen/fav/lang, весь B3) и заняв
-                   нижнее меню, где живёт подпись режима (закон №27).
-     deep-link   - работает при ЛЮБОМ способе открытия, ничего не ломает, и на большинстве
-                   клиентов сворачивает аппку, а не убивает: вернуться один тап.
-   Выбран deep-link. Прерывание НАЗЫВАЕТСЯ человеку заранее подписью под кнопками, а не
-   выясняется после первого тапа.
+                   контракту ЗАКРЫВАЕТ аппку. Плюс пришлось бы сменить способ открытия,
+                   потеряв параметры ссылки (screen/fav/lang, весь B3) и заняв нижнее
+                   меню, где живёт подпись режима (закон №27).
+     deep-link   - работает при ЛЮБОМ способе открытия и сворачивает аппку, а не убивает.
 
-   ЛАЙК НЕЛЬЗЯ КОПИТЬ И СЛАТЬ ПАЧКОЙ. Опознаёт трек бот, в момент получения сигнала: к
-   моменту отправки «трёх накопленных лайков» в эфире играет уже другое, и мы запомнили бы
-   не тот трек. Поэтому один тап - одна отправка, и это не оптимизируется. */
-function botLink(code) {
-  return 'https://t.me/' + BOT + '?start=' + encodeURIComponent(code);
+   ОТСЮДА ГЛАВНОЕ: ТАП «НРАВИТСЯ» НЕ ДОЛЖЕН НИКУДА ХОДИТЬ. Живой прогон Ren: 👍 уводило в
+   чат, музыка обрывалась, и человек возвращался руками ради одного тапа. Поэтому 👍/👎/⭐
+   пишутся ЛОКАЛЬНО и СИНХРОННО (localStorage, не CloudStorage: тот асинхронный, а тап
+   прямо перед закрытием аппки не должен проиграть гонку записи), кнопка загорается сразу,
+   музыка не останавливается. Боту сигналы уходят ПАЧКОЙ - при следующем переходе в чат
+   (⏺ или 🎧 подхватывают накопленное попутно) или по явной кнопке «Отправить».
+
+   ЧЕГО НЕТ И ПОЧЕМУ. (а) Отправки «на закрытии аппки» не существует: открыть чат из
+   обработчика ухода нельзя - аппка в этот момент уже уходит, а насильно уводить человека
+   в чат на сворачивании было бы хамством. Поэтому очередь ЖИВЁТ до следующего перехода и
+   её размер видно. (б) В команду start Telegram пускает 64 символа, поэтому за один
+   переход уезжает не больше двух сигналов, и остаток НАЗЫВАЕТСЯ («ушло 2, осталось 1»).
+   (в) МЕТАДАННЫХ ТРЕКА У ЭФИРА НЕТ ВОВСЕ: браузер не отдаёт ICY-метаданные потока, а
+   Media Session хранит ровно то, что мы туда сами записали - читать это обратно и
+   называть «метаданными трека» значит выдумывать (закон №22). Поэтому сигнал по радио
+   честно означает «понравилась станция в такое-то время», и бот так его и запишет; чтобы
+   узнать, ЧТО именно играло, есть ⏺ - он пишет кусок и опознаёт его на месте.
+   ИМЯ СТАНЦИИ В ПАЧКЕ НЕ ЕДЕТ: в 64 символа его не уложить, а uuid точнее любого имени -
+   бот достаёт по нему станцию сам, тем же вызовом, что и весь раздел. */
+var LS_SIG = 'hara_sig_q';
+var SIG_MAX = 40;          /* очередь это буфер, а не архив */
+var START_MAX = 64;        /* потолок команды start у Telegram, чужой и неизменяемый */
+/* ПОЧЕМУ 7.0. Ниже этой версии SDK не постит клиенту web_app_open_tg_link, а честно
+   делает location.href - и вебвью аппки уезжает на ВЕБ-СТРАНИЦУ t.me с кнопкой «START
+   BOT» вместо чата. Ровно это Ren и увидел на живом прогоне. С 7.0 метод документирован
+   как «аппка НЕ закрывается», что нам и нужно. Не дотягивает клиент - кнопки перехода
+   молчат и говорят почему, но отметки всё равно копятся: терять их из-за версии нельзя. */
+var MIN_LINK_VER = '7.0';
+var B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+
+function actsBox(it) {
+  /* РЯД ДЕЙСТВИЙ ЖИВЁТ ТАМ, ГДЕ ВИДЕН ОБЪЕКТ. У станции это полноэкранный плеер, у ролика
+     YouTube - место прямо под их плеером: полноэкранный накрыл бы ролик, а прятать его
+     нельзя. Выбор делает САМ объект, поэтому две копии «где сейчас кнопки» невозможны. */
+  return (it && it.yt) ? $('ytacts') : $('acts');
 }
 
-function act(code, label) {
-  if (!BOT || BOT.indexOf('{{') === 0) return;
-  $('actnote').textContent = t('a_sent') + ': ' + label;
-  var url = botLink(code);
-  try {
-    if (TG && TG.openTelegramLink) { TG.openTelegramLink(url); return; }
-  } catch (e) {}
-  try { window.open(url, '_blank'); } catch (e) { location.href = url; }
+function note(txt) {
+  var el = actsBox(state.cur).querySelector('.astat');
+  if (el) el.textContent = txt || '';
 }
 
-function paintActs(it) {
-  /* Набор кнопок зависит от того, ЧТО играет: записать можно живой эфир, а не выпуск
-     подкаста, который и так лежит файлом. Диджей доступен всегда - он про настроение. */
-  var box = $('acts');
-  box.innerHTML = '';
-  if (!BOT || BOT.indexOf('{{') === 0) { box.className = ''; return; }
-  var rows = [];
-  if (it && !it.pod && it.id) {
-    rows.push(['👍', 'a_like', 'l' + it.id]);
-    rows.push(['👎', 'a_no', 'd' + it.id]);
-    rows.push(['⭐', 'a_star', 's' + it.id]);
-    rows.push(['⏺', 'a_rec', 'r' + it.id]);
+function sigLoad() {
+  try { return JSON.parse(localStorage.getItem(LS_SIG) || '[]') || []; } catch (e) { return []; }
+}
+function sigSave(q) {
+  try { localStorage.setItem(LS_SIG, JSON.stringify(q.slice(-SIG_MAX))); } catch (e) {}
+}
+
+function refOf(it) {
+  /* ЗА ЧТО МОЖНО ОТМЕТИТЬСЯ. Только то, что бот умеет ОПОЗНАТЬ по короткой ссылке:
+     станция радио (uuid) и ролик YouTube (11 симв). У выпуска подкаста, главы книги и
+     трека из снимка такой ссылки нет - в 64 символа их не уложить, а кнопка, сигнал от
+     которой некуда деть, обещает то, чего не будет. */
+  if (!it || !it.id) return null;
+  if (it.yt) return { ty: 'y', ref: it.yt, nm: it.name };
+  if (!it.pod) return { ty: 'r', ref: it.id, nm: it.name };
+  return null;
+}
+
+function enc2(n) {
+  n = Math.max(0, Math.min(4095, Math.round(n || 0)));
+  return B64.charAt((n >> 6) & 63) + B64.charAt(n & 63);
+}
+
+function packUuid(id) {
+  /* uuid станции в 36 символов не оставляет места второму сигналу, а те же 128 бит в
+     base64url занимают 22 - ровно на этом и держится «пачка», а не «по одному». */
+  var h = String(id || '').replace(/-/g, '').toLowerCase(), s = '', i;
+  if (!/^[0-9a-f]{32}$/.test(h)) return '';
+  for (i = 0; i < 32; i += 2) s += String.fromCharCode(parseInt(h.substr(i, 2), 16));
+  try { return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+  catch (e) { return ''; }
+}
+
+function sigToken(s) {
+  var ref = s.ty === 'r' ? packUuid(s.ref)
+                         : (/^[A-Za-z0-9_-]{11}$/.test(s.ref || '') ? s.ref : '');
+  if (!ref) return '';
+  return s.a + s.ty + ref + enc2((Date.now() - (s.at || Date.now())) / 60000);
+}
+
+function sigAdd(a, it) {
+  var r = refOf(it), i, same, pair;
+  if (!r) return null;
+  var q = sigLoad();
+  /* ОДНА ОТМЕТКА НА ОБЪЕКТ. 👍 после 👎 это ИСПРАВЛЕНИЕ, а не второй сигнал: уехав
+     парой, они заставили бы бота поверить обоим. ⭐ живёт отдельно - избранное это не
+     оценка. */
+  for (i = q.length - 1; i >= 0; i--) {
+    same = q[i].ty === r.ty && q[i].ref === r.ref;
+    if (!same) continue;
+    pair = (a !== 's' && q[i].a !== 's') || q[i].a === a;
+    if (pair) q.splice(i, 1);
   }
-  rows.push(['🎧', 'a_dj', 'j']);
-  rows.forEach(function (r) {
-    var b = document.createElement('button');
-    b.type = 'button';
-    b.textContent = r[0];
-    b.title = t(r[1]);
-    b.setAttribute('aria-label', t(r[1]));
-    b.addEventListener('click', function () {
-      if (r[2].charAt(0) === 's' && it && it.id) { rememberFav(it.id); paintChips(); }
-      act(r[2], t(r[1]));
+  q.push({ a: a, ty: r.ty, ref: r.ref, nm: r.nm, at: Date.now() });
+  sigSave(q);
+  return r;
+}
+
+function sigMarks(it) {
+  /* Что уже отмечено у ЭТОГО объекта: кнопка обязана показывать состояние сразу, не
+     дожидаясь бота. Избранное берётся ещё и из общего списка - оно переживает отправку. */
+  var r = refOf(it), out = {};
+  if (!r) return out;
+  sigLoad().forEach(function (s) { if (s.ty === r.ty && s.ref === r.ref) out[s.a] = 1; });
+  if (r.ty === 'r' && favIds().indexOf(r.ref) >= 0) out.s = 1;
+  return out;
+}
+
+function cmdToken(a, it) {
+  /* КОМАНДА - ТАКОЙ ЖЕ ТОКЕН, как отметка, и это не единообразие ради красоты: старая
+     форма (буква + сырой uuid) занимает 37 символов и ЗАКРЫВАЕТ разбор на себе, то есть
+     накопленное, уехавшее следом, бот молча выбросит - а аппка уже вычеркнула его из
+     очереди. Ловится ровно этим прогоном: payload сразу отдаётся настоящему разбору бота.
+     Не упаковалось (uuid не шестнадцатеричный) - уходим старой формой И БЕЗ ПОПУТЧИКОВ. */
+  var r = refOf(it);
+  if (!r) return null;
+  var tok = sigToken({ a: a, ty: r.ty, ref: r.ref, at: Date.now() });
+  return tok ? { tok: tok, solo: false } : { tok: a + r.ref, solo: true };
+}
+
+function sigPack(q, head) {
+  /* Жадно и в порядке очереди: старое уходит первым, ничего не голодает. */
+  var out = head || '', taken = [], i, tok;
+  for (i = 0; i < q.length; i++) {
+    tok = sigToken(q[i]);
+    if (!tok) { taken.push(i); continue; }      /* нечего слать - и не копим вечно */
+    if (out.length + tok.length > START_MAX) break;
+    out += tok;
+    taken.push(i);
+  }
+  return { code: out, taken: taken };
+}
+
+function linkVer() { try { return (TG && TG.version) || '?'; } catch (e) { return '?'; } }
+
+function canLink() {
+  if (!BOT || BOT.indexOf('{{') === 0) return false;
+  if (!TG || !TG.openTelegramLink || !TG.isVersionAtLeast) return false;
+  try { return !!TG.isVersionAtLeast(MIN_LINK_VER); } catch (e) { return false; }
+}
+
+function goBot(code) {
+  if (!code) return false;
+  if (!canLink()) { note(t('a_nolink').replace('{v}', linkVer())); return false; }
+  try {
+    TG.openTelegramLink('https://t.me/' + BOT + '?start=' + encodeURIComponent(code));
+    return true;
+  } catch (e) {
+    note(t('a_nolink').replace('{v}', linkVer()));
+    return false;
+  }
+}
+
+function send(cmd, label, solo) {
+  /* Переход в чат заодно увозит накопленное: отдельная синхронизация ради тех же
+     сигналов была бы вторым прерыванием на ровном месте. */
+  var q = solo ? [] : sigLoad(), p = sigPack(q, cmd || '');
+  if (!goBot(p.code)) return;
+  /* ВЫЧЁРКИВАЕМ УПАКОВАННОЕ СРАЗУ. Подтверждения от бота у аппки нет и быть не может
+     (обратного канала нет вовсе), а сигнал, который «на всякий случай» остался в
+     очереди, уедет ещё раз при следующем переходе - и так каждый раз. */
+  var left = q.filter(function (_x, i) { return p.taken.indexOf(i) < 0; });
+  if (!solo) { sigSave(left); }     /* solo: очередь не ехала, и стирать её нечем */
+  note(left.length ? t('a_left').replace('{n}', String(p.taken.length))
+                              .replace('{k}', String(left.length))
+                   : (t('a_sent') + (label ? ': ' + label : '')));
+  paintActs(state.cur);
+}
+
+function haptic(kind) {
+  try { if (TG && TG.HapticFeedback) TG.HapticFeedback.impactOccurred(kind || 'light'); }
+  catch (e) {}
+}
+
+function mkBtn(row, icon, key, pressed, fn) {
+  var b = document.createElement('button');
+  b.type = 'button';
+  b.textContent = icon;
+  b.title = t(key);
+  b.setAttribute('aria-label', t(key));
+  b.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+  b.addEventListener('click', fn);
+  row.appendChild(b);
+  return b;
+}
+
+function paintActs(it, keep) {
+  /* ДВЕ ГРУППЫ С РАЗНОЙ ЦЕНОЙ ТАПА. Верхняя не трогает воспроизведение вовсе, нижняя
+     уводит в чат, и подписи говорят это ДО тапа. Набор зависит от того, что играет:
+     записать можно живой эфир, а не выпуск подкаста, который и так лежит файлом. */
+  var box = actsBox(it), r = refOf(it), marks = sigMarks(it), q = sigLoad();
+  var other = (box.id === 'acts') ? $('ytacts') : $('acts');
+  other.innerHTML = '';
+  other.className = '';
+  box.innerHTML = '';
+  var rowA = document.createElement('div');
+  rowA.className = 'arow';
+  if (r) {
+    mkBtn(rowA, '👍', 'a_like', marks.l, function () { mark('l', it, '👍'); });
+    mkBtn(rowA, '👎', 'a_no', marks.d, function () { mark('d', it, '👎'); });
+    mkBtn(rowA, '⭐', 'a_star', marks.s, function () {
+      if (r.ty === 'r') { rememberFav(r.ref); paintChips(); }
+      mark('s', it, '⭐');
     });
-    box.appendChild(b);
-  });
-  box.className = 'on';
-  $('actnote').textContent = t('a_hint');
+    box.appendChild(rowA);
+    var n1 = document.createElement('div');
+    n1.className = 'anote';
+    n1.textContent = t('a_hint1') + (q.length ? ' ' + t('a_queue').replace('{n}', String(q.length)) : '');
+    box.appendChild(n1);
+  }
+  /* ГРУППА ПЕРЕХОДА. Без имени бота уходить некуда - кнопок нет вовсе, а отметки выше
+     продолжают работать: они локальные и ждут своего часа. */
+  if (BOT && BOT.indexOf('{{') !== 0) {
+    var gap = document.createElement('div');
+    gap.className = 'agap';
+    box.appendChild(gap);
+    var rowB = document.createElement('div');
+    rowB.className = 'arow';
+    if (r && r.ty === 'r') {
+      mkBtn(rowB, '⏺', 'a_rec', false, function () {
+        var c = cmdToken('r', it);
+        if (c) send(c.tok, t('a_rec'), c.solo);
+      });
+    }
+    mkBtn(rowB, '🎧', 'a_dj', false, function () { send('j', t('a_dj')); });
+    if (q.length) {
+      mkBtn(rowB, '📤', 'a_sync', false, function () { send('', t('a_sync')); });
+    }
+    box.appendChild(rowB);
+    var n2 = document.createElement('div');
+    n2.className = 'anote';
+    n2.textContent = t('a_hint2');
+    box.appendChild(n2);
+  }
+  if (it && it.yt) {
+    /* ПРО ФОН ГОВОРИМ ЗДЕСЬ, ПОД САМИМ ПЛЕЕРОМ. Это ограничение их правил, и человек
+       упрётся в него на первом же сворачивании аппки - лучше прочитать заранее. */
+    var n3 = document.createElement('div');
+    n3.className = 'anote';
+    n3.textContent = t('yt_note');
+    box.appendChild(n3);
+  }
+  var st = document.createElement('div');
+  st.className = 'astat';
+  box.appendChild(st);
+  box.className = box.children.length > 1 ? 'on' : '';
+  if (!keep) note('');
+}
+
+function mark(a, it, icon) {
+  var r = sigAdd(a, it);
+  if (!r) return;
+  haptic('light');
+  /* Сначала перерисовка (кнопка обязана загореться в тот же тап), потом строка статуса:
+     наоборот перерисовка затёрла бы собственный ответ человеку. */
+  paintActs(it, true);
+  note(t('a_saved').replace('{x}', icon + ' ' + (r.nm || '')));
 }
 
 /* ═══ ПЕРЕМОТКА ══════════════════════════════════════════════════════════════════════
@@ -1015,7 +1467,11 @@ function paintTabs() {
      хуже отсутствующего. Одна вкладка - переключать нечего, строку не показываем вовсе. */
   var box = $('tabs');
   box.innerHTML = '';
-  var live = SECTIONS.filter(function (sec) { return sec.kind === 'live' || DATA[sec.id]; });
+  /* РАЗДЕЛ ЖИВ, ЕСЛИ ДОЕХАЛ ХОТЯ БЫ ОДИН ЕГО ИСТОЧНИК: у музыки их два (чарт ютуба и
+     открытия), и требовать оба значило бы убрать вкладку из-за чужого таймаута. */
+  var live = SECTIONS.filter(function (sec) {
+    return sec.kind === 'live' || DATA[sec.id] || (sec.alt && DATA.disc);
+  });
   if (live.length < 2) { box.className = ''; return; }
   box.className = 'on';
   live.forEach(function (sec) {
@@ -1041,12 +1497,20 @@ function paintChips() {
        пустой раздел хуже отсутствующего. */
     list = FILTERS.slice();
     if (favIds().length) list.unshift({ id: 'fav', ru: t('fav_tab'), en: t('fav_tab') });
+  } else if (sec.kind === 'yt') {
+    /* ЧИП ЕСТЬ ТОЛЬКО У ДОЕХАВШЕГО ИСТОЧНИКА: чип, открывающий пустоту, хуже
+       отсутствующего - то же правило, что у вкладок. */
+    list = [];
+    if (DATA.music) list.push({ id: 'chart', ru: t('yt_chart'), en: t('yt_chart') });
+    if (DATA.disc) list.push({ id: 'disc', ru: t('yt_disc'), en: t('yt_disc') });
   } else {
     list = [{ id: '', ru: t('p_all'), en: t('p_all') }].concat(
       (DATA[sec.id] || {}).topics || []);
   }
   list.forEach(function (f) {
-    var cur = sec.kind === 'live' ? state.filter : state.ptopic;
+    var cur = sec.kind === 'live' ? state.filter
+            : (sec.kind === 'yt' ? (state.ptopic || (DATA.music ? 'chart' : 'disc'))
+                                 : state.ptopic);
     var c = document.createElement('button');
     c.type = 'button'; c.className = 'chip'; c.textContent = f[LANG] || f.ru;
     c.setAttribute('aria-pressed', f.id === cur ? 'true' : 'false');
@@ -1096,10 +1560,20 @@ elQ.addEventListener('input', function () {
    и перезагружаемся ОДИН раз при расхождении.
    Защита от цикла обязательна: если version.txt почему-то всегда отличается (не доложили
    при деплое, отдаётся не тот файл), без флага страница перезагружалась бы вечно. */
-var VERSION = '46b365d2d17d';
-/* ИМЯ БОТА подставляется при выкладке (как и версия). Не подставлено - действий в плеере
-   нет вовсе: кнопка, которой некуда уходить, хуже отсутствующей. */
-var BOT = 'theundertaker_test_bot';
+var VERSION = 'abbcd9f4ab92';
+/* ИМЯ БОТА ПРИХОДИТ ПАРАМЕТРОМ ССЫЛКИ, а зашитое при выкладке - только фолбэк.
+   ПОЧЕМУ ТАК. Страница ОДНА на всех ботов, а деплоить её могут и с прода, и со стенда.
+   Зашитое при сборке имя означает: выложил со стенда - у всех на проде кнопки ведут в
+   тест-бота, и это разъедется при первом же деплое не с той машины. Клиент своего бота
+   не знает (Telegram.WebApp такого поля не даёт вовсе), поэтому единственный честный
+   источник - ТОТ, КТО ОТКРЫЛ: бот сам подставляет себя в адрес кнопки. Фолбэк на
+   зашитое имя оставлен для открытия через роутер startapp, где параметров нет. */
+var BOT = (function () {
+  var p = (qp('bot') || '').replace(/[^A-Za-z0-9_]/g, '').slice(0, 40);
+  if (p) return p;
+  var baked = '{{BOT}}';
+  return baked.indexOf('{{') === 0 ? '' : baked;
+})();
 
 (function checkVersion() {
   if (VERSION.indexOf('{{') === 0) return;          /* не задеплоено - сверять не с чем */
@@ -1121,7 +1595,15 @@ var BOT = 'theundertaker_test_bot';
        версии (ровно то, что мы чинили). Адрес с ?v=<хэш> вебвью в кэше не находит и
        обязан сходить в сеть. Заодно это делает страницу самолечащейся: на следующем
        деплое хэш снова разойдётся, и адрес снова сменится. */
-    location.replace(location.pathname + '?v=' + encodeURIComponent(v) + location.hash);
+    /* ПАРАМЕТРЫ СОХРАНЯЮТСЯ. Первая редакция уходила на голый pathname + '?v=', и
+       перезагрузка ТЕРЯЛА всё, что несла ссылка: screen, fav, lang, bot. То есть человек,
+       пришедший по кнопке «Избранное», после обновления версии оказывался на радио без
+       своих станций, а кнопки действий пропадали вместе с именем бота. Поймано браузерным
+       прогоном: после reload действий в плеере не было ни одного. */
+    var _q = null;
+    try { _q = new URLSearchParams(location.search); } catch (e) { _q = null; }
+    if (_q) { _q.set('v', v); } 
+    location.replace(location.pathname + '?' + (_q ? _q.toString() : 'v=' + encodeURIComponent(v)) + location.hash);
   }).catch(function () { /* нет сети - работаем тем, что есть */ });
 })();
 
@@ -1144,6 +1626,24 @@ document.documentElement.lang = LANG;
     var st = JSON.parse(raw);
     if (st && st.url && st.name) pick(st, false);
   } catch (e) {}
+})();
+
+/* СТАНЦИЯ ИЗ ССЫЛКИ. После ⏺ бот присылает файл и кнопку «↩️ Вернуться в плеер» - она
+   несёт ТУ ЖЕ станцию, чтобы человек вернулся туда, откуда ушёл, а не на последнюю
+   запомненную (обычно это одно и то же, но открытие на другом устройстве или чистый
+   вебвью дали бы пустой localStorage). Играть сами не начинаем: на iOS первый play
+   обязан быть по тапу, иначе живая станция получит «не отвечает» на ровном месте. */
+(function fromLink() {
+  var id = (qp('station') || '').slice(0, 36);
+  if (!/^[0-9a-fA-F-]{36}$/.test(id)) return;
+  if (state.cur && state.cur.id === id) return;
+  fetch(API + '/json/stations/byuuid?uuids=' + encodeURIComponent(id))
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (rows) {
+      var st = (rows && rows.length) ? stationOf(rows[0]) : null;
+      if (st && st.id) pick(st, false);
+    })
+    .catch(function () { /* не открылась - остаёмся на восстановленной */ });
 })();
 
 paintTabs();
