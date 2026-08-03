@@ -1734,7 +1734,7 @@ var VERSION = '5594370a72b8';
 var API_BASE = (function () {
   var p = (qp('api') || '').trim();
   if (p.indexOf('https://') === 0) return p.replace(/\/+$/, '');
-  var baked = 'https://hara-search.laynenorstrud.workers.dev';
+  var baked = '{{API}}';
   return baked.indexOf('{{') === 0 ? '' : baked.replace(/\/+$/, '');
 })();
 
@@ -1747,7 +1747,7 @@ function canSearch() {
 var BOT = (function () {
   var p = (qp('bot') || '').replace(/[^A-Za-z0-9_]/g, '').slice(0, 40);
   if (p) return p;
-  var baked = 'theundertaker_test_bot';
+  var baked = 'harecrypta_digest_bot';
   return baked.indexOf('{{') === 0 ? '' : baked;
 })();
 
