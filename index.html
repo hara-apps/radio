@@ -73,8 +73,13 @@
      шапкой, на своём месте, и всё, что играет с ютуба, играет ЗДЕСЬ. */
   #ytbox { display: none; padding: 6px 12px 4px; }
   #ytbox.on { display: block; }
+  /* ВЫСОТА КОМПАКТНАЯ И ФИКСИРОВАННАЯ. Полный 16:9 превращал раздел в видеосервис, а
+     спрятать плеер нельзя по условиям YouTube - нужна середина: видно, ЧТО играет, и
+     видно, что это музыкальный раздел, а не ютуб внутри ютуба. Сам ролик их плеер
+     вписывает в эту рамку сам, пропорции не рвутся.
+     МАКСИМУМ ПО ШИРИНЕ - чтобы на планшете полоска не растянулась во весь экран. */
   #ytwrap {
-    position: relative; width: 100%; padding-top: 56.25%;   /* 16:9 без скачков высоты */
+    position: relative; width: 100%; max-width: 320px; height: 120px; margin: 0 auto;
     border-radius: 12px; overflow: hidden; background: #000;
   }
   #ytwrap iframe, #ytwrap > div { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
@@ -331,10 +336,37 @@ var STR = {
      приезжает снимком, а живой поиск идёт в чате, и это сказано прямо. */
   yt_chart:  { ru: '🔥 Сейчас слушают',          en: '🔥 Trending now' },
   yt_disc:   { ru: '💿 Открытия',                en: '💿 Discoveries' },
-  yt_note:   { ru: 'Играет плеером YouTube и только пока аппка открыта: в фоне и с ' +
-                   'выключенным экраном звука не будет. Это их правила, не наша недоделка.',
-               en: 'Plays in the YouTube player and only while the app is open: no ' +
-                   'background or screen-off audio. Their rules, not our shortcoming.' },
+  /* ПОД РОЛИКОМ ПОДПИСЬ КОРОТКАЯ. Длинные объяснения (что уводит в чат, а что нет) нужны
+     у эфира, где смыслы кнопок правда разные; здесь всё локально, кроме 🎧, и три абзаца
+     текста просто съедали экран - замер на 320px: список уезжал ЦЕЛИКОМ под сгиб. */
+  yt_note:   { ru: 'Играет, пока аппка открыта: в фоне звука не будет. Правила YouTube.',
+               en: 'Plays while the app is open, no background audio. YouTube rules.' },
+  a_hint_y:  { ru: 'Отметки запоминаю на месте, 🎧 уводит в чат.',
+               en: 'Marks are saved here; 🎧 takes you to the chat.' },
+  /* ЖИВОЙ ПОИСК ПРЯМО ЗДЕСЬ. Раньше он жил в чате: человек уходил из плеера ради одного
+     запроса, и это ломало ровно то, ради чего плеер и делался (закон №39). Ключ по-прежнему
+     не в странице - за ним ходит наш эндпоинт, который проверяет подпись Telegram. */
+  yt_find:   { ru: 'Поиск на YouTube',           en: 'Search YouTube' },
+  yt_wait:   { ru: 'Ищу на YouTube...',          en: 'Searching YouTube...' },
+  yt_none_h: { ru: 'Ничего не нашлось',          en: 'Nothing found' },
+  yt_none_b: { ru: 'Попробуй другие слова или загляни в «Открытия».',
+               en: 'Try other words, or look into "Discoveries".' },
+  yt_q_h:    { ru: 'Квота на сегодня кончилась', en: 'Today\u2019s quota is spent' },
+  yt_q_b:    { ru: 'Она общая на всех и вернётся ночью. «Открытия» рядом играют как обычно.',
+               en: 'It is shared by everyone and comes back at night. "Discoveries" next '
+                 + 'to it plays as usual.' },
+  yt_u_h:    { ru: 'Твои поиски на сегодня кончились',
+               en: 'Your searches for today are used up' },
+  yt_u_b:    { ru: 'Квота общая, поэтому у каждого свой кусок. Вернётся ночью.',
+               en: 'The quota is shared, so everyone gets a slice. It comes back at night.' },
+  yt_a_h:    { ru: 'Telegram не подтвердил, что это ты',
+               en: 'Telegram did not confirm it is you' },
+  yt_a_b:    { ru: 'Так бывает, если плеер открыт очень давно. Закрой и открой заново.',
+               en: 'That happens when the player has been open for a long time. Close and '
+                 + 'open it again.' },
+  yt_d_h:    { ru: 'Поиск не ответил',           en: 'Search did not answer' },
+  yt_d_b:    { ru: 'Это наша сторона, не твоя. Можно попробовать ещё раз.',
+               en: 'That is our side, not yours. You can try again.' },
   /* НЕ СОБРАЛОСЬ - ГОВОРИМ ПРЯМО. Молча урезанная вкладка читается как «фичи нет вовсе»
      (живой прогон Ren: чипа чартов не было, и выглядело это как отсутствие раздела). */
   yt_off_h:  { ru: 'Чарт YouTube не собрался',   en: 'The YouTube chart did not build' },
@@ -344,8 +376,11 @@ var STR = {
                en: 'The bot has no YouTube key configured, so there is no selection here. ' +
                    'Search for a track in the chat with the Undertaker; "Discoveries" next ' +
                    'to it plays as usual.' },
-  yt_built:  { ru: 'Чарт собран {d}. Живой поиск по YouTube идёт в чате у Гробовщика.',
-               en: 'Chart built {d}. Live YouTube search is in the chat with the Undertaker.' },
+  yt_built:  { ru: 'Чарт собран {d}. Ищи что угодно строкой выше, не выходя из плеера.',
+               en: 'Chart built {d}. Search for anything in the field above, without ' +
+                   'leaving the player.' },
+  yt_built_c: { ru: 'Чарт собран {d}. Живой поиск по YouTube идёт в чате у Гробовщика.',
+                en: 'Chart built {d}. Live YouTube search is in the chat with the Undertaker.' },
   /* ОТКАЗЫ ПЛЕЕРА РАЗНЫЕ ПО СМЫСЛУ, И ПУТАТЬ ИХ НЕЛЬЗЯ: «владелец запретил встраивание»
      чинится открытием на ютубе, а «ролика больше нет» не чинится вовсе. */
   yt_e_gone: { ru: 'Ролик удалён или закрыт владельцем.',
@@ -677,6 +712,40 @@ function showFav(list) {
     });
 }
 
+var YT_ERR = { quota: ['yt_q_h', 'yt_q_b'], userlimit: ['yt_u_h', 'yt_u_b'],
+               nokey: ['yt_d_h', 'yt_d_b'], empty: ['yt_none_h', 'yt_none_b'],
+               no_initdata: ['yt_a_h', 'yt_a_b'], bad_sign: ['yt_a_h', 'yt_a_b'],
+               stale: ['yt_a_h', 'yt_a_b'], no_user: ['yt_a_h', 'yt_a_b'] };
+
+function ytSearch(q) {
+  /* ПОИСК ЖИВЬЁМ, НЕ ВЫХОДЯ ИЗ ПЛЕЕРА. Подпись Telegram уходит заголовком: эндпоинт по
+     ней узнаёт, что запрос от нашего человека, и только поэтому может держать ключ у себя.
+     ГОНКА ЗАКРЫТА тем же счётчиком, что у радио: отвечает только последний запрос. */
+  var my = ++state.seq;
+  showNote(t('yt_wait'));
+  fetch(API_BASE + '/search?q=' + encodeURIComponent(q),
+        { headers: { 'X-Init-Data': (TG && TG.initData) || '' } })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (my !== state.seq) return;
+      if (j && j.error) {
+        var k = YT_ERR[j.error] || ['yt_d_h', 'yt_d_b'];
+        state.items = [];
+        showNote(t(k[0]), t(k[1]));
+        return;
+      }
+      var rows = (j && j.items) || [];
+      if (!rows.length) { state.items = []; showNote(t('yt_none_h'), t('yt_none_b')); return; }
+      state.items = rows.map(ytItem);
+      render();
+    })
+    .catch(function () {
+      if (my !== state.seq) return;
+      state.items = [];
+      showNote(t('yt_d_h'), t('yt_d_b'));
+    });
+}
+
 function loadSection() {
   /* ОДИН ЗАГРУЗЧИК НА ВСЕ СНИМКИ. Разделов уже три (подкасты, музыка, книги), и три копии
      «отфильтровать по теме, отфильтровать по поиску, отрисовать» разошлись бы на первой
@@ -686,7 +755,10 @@ function loadSection() {
 
   if (sec.kind === 'yt') {                         /* музыка: ютуб или открытия */
     var topic = state.ptopic || (DATA.music ? 'chart' : 'disc');
-    if (topic !== 'disc' && !DATA.music) {
+    /* ЗАПРОС В ЮТУБ ИДЁТ ЖИВЬЁМ, а в «Открытиях» фильтруется снимок: там каталог наш и
+       целиком лежит на странице, ходить за ним никуда не надо. */
+    if (q && topic !== 'disc' && canSearch()) { ytSearch(state.q); return; }
+    if (topic !== 'disc' && !DATA.music && !q) {
       state.items = [];
       showNote(t('yt_off_h'), t('yt_off_b'));
       return;
@@ -874,8 +946,9 @@ function render() {
       d = _snap.built ? new Date(_snap.built * 1000).toLocaleDateString(
         LANG === 'ru' ? 'ru-RU' : 'en-GB') : '';
     } catch (e) { d = ''; }
-    hint.textContent = d ? t(_yt ? 'yt_built' : (state.mode === 'music' ? 'm_built' : 'p_built'))
-      .replace('{d}', d) : '';
+    var _key = _yt ? (canSearch() ? 'yt_built' : 'yt_built_c')
+                   : (state.mode === 'music' ? 'm_built' : 'p_built');
+    hint.textContent = d ? t(_key).replace('{d}', d) : '';
   }
   if (hint.textContent) elList.appendChild(hint);
 }
@@ -1369,18 +1442,25 @@ function paintActs(it, keep) {
       mkBtn(rowA, '👎', 'a_no', marks.d, function () { mark('d', it, '👎'); });
     }
     box.appendChild(rowA);
+    if (it && it.yt) { box.dataset.solo = '1'; }
     var n1 = document.createElement('div');
     n1.className = 'anote';
-    n1.textContent = t('a_hint1') + (q.length ? ' ' + t('a_queue').replace('{n}', String(q.length)) : '');
+    n1.textContent = ((it && it.yt) ? t('a_hint_y') : t('a_hint1'))
+      + (q.length ? ' ' + t('a_queue').replace('{n}', String(q.length)) : '');
     box.appendChild(n1);
   }
   /* ГРУППА ПЕРЕХОДА. Без имени бота уходить некуда - кнопок нет вовсе, а отметки выше
-     продолжают работать: они локальные и ждут своего часа. */
+     продолжают работать: они локальные и ждут своего часа.
+     У РОЛИКА ОТДЕЛЬНОЙ ГРУППЫ НЕТ: там переход только у 🎧, и ради одной кнопки черта с
+     подписью съедали бы семьдесят пикселей на экране, где главное - сам плеер. */
   if (BOT && BOT.indexOf('{{') !== 0) {
-    var gap = document.createElement('div');
-    gap.className = 'agap';
-    box.appendChild(gap);
-    var rowB = document.createElement('div');
+    var solo = !!(it && it.yt);
+    if (!solo) {
+      var gap = document.createElement('div');
+      gap.className = 'agap';
+      box.appendChild(gap);
+    }
+    var rowB = solo ? rowA : document.createElement('div');
     rowB.className = 'arow';
     if (r && r.ty === 'r') {
       /* 👍 и 👎 В ЭФИРЕ - ПРО ТРЕК, а не про станцию, и поэтому уходят НЕМЕДЛЕННО: бот в
@@ -1405,11 +1485,14 @@ function paintActs(it, keep) {
     if (q.length) {
       mkBtn(rowB, '📤', 'a_sync', false, function () { send('', t('a_sync')); });
     }
-    box.appendChild(rowB);
-    var n2 = document.createElement('div');
-    n2.className = 'anote';
-    n2.textContent = t('a_hint2');
-    box.appendChild(n2);
+    if (!solo) { box.appendChild(rowB); }
+    if (!(it && it.yt)) {
+      // у ролика вторая группа это один 🎧, и объяснять там нечего - строка выше уже сказала
+      var n2 = document.createElement('div');
+      n2.className = 'anote';
+      n2.textContent = t('a_hint2');
+      box.appendChild(n2);
+    }
   }
   if (it && it.yt) {
     /* ПРО ФОН ГОВОРИМ ЗДЕСЬ, ПОД САМИМ ПЛЕЕРОМ. Это ограничение их правил, и человек
@@ -1525,7 +1608,10 @@ function paintChips() {
   var box = $('chips');
   box.innerHTML = '';
   var sec = section(state.mode);
-  elQ.placeholder = t(sec.ph || 'search');
+  /* ПОДПИСЬ ПОЛЯ ГОВОРИТ ПРАВДУ: живой поиск обещаем только когда он правда работает,
+     иначе это «поиск в подборке» и обещать больше нельзя. */
+  elQ.placeholder = (sec.kind === 'yt' && canSearch() && (state.ptopic || 'chart') !== 'disc')
+    ? t('yt_find') : t(sec.ph || 'search');
   var list;
   if (sec.kind === 'live') {
     /* ⭐ ИЗБРАННОЕ ОТДЕЛЬНЫМ ЧИПОМ: станции приезжают в адресе от бота (fav=) и
@@ -1598,7 +1684,7 @@ elQ.addEventListener('input', function () {
    и перезагружаемся ОДИН раз при расхождении.
    Защита от цикла обязательна: если version.txt почему-то всегда отличается (не доложили
    при деплое, отдаётся не тот файл), без флага страница перезагружалась бы вечно. */
-var VERSION = '0540d42bdfc4';
+var VERSION = '5546fcdf1b1a';
 /* ИМЯ БОТА ПРИХОДИТ ПАРАМЕТРОМ ССЫЛКИ, а зашитое при выкладке - только фолбэк.
    ПОЧЕМУ ТАК. Страница ОДНА на всех ботов, а деплоить её могут и с прода, и со стенда.
    Зашитое при сборке имя означает: выложил со стенда - у всех на проде кнопки ведут в
@@ -1606,6 +1692,23 @@ var VERSION = '0540d42bdfc4';
    не знает (Telegram.WebApp такого поля не даёт вовсе), поэтому единственный честный
    источник - ТОТ, КТО ОТКРЫЛ: бот сам подставляет себя в адрес кнопки. Фолбэк на
    зашитое имя оставлен для открытия через роутер startapp, где параметров нет. */
+/* АДРЕС ЭНДПОИНТА ПОИСКА. Тем же способом, что имя бота: параметр ссылки сильнее
+   зашитого при выкладке. Причина та же - страница одна на всех, а выкладывать её могут и
+   с прода, и со стенда. Нет адреса - живого поиска нет, и вместо него честно фильтруется
+   снимок (а не пустой экран). */
+var API_BASE = (function () {
+  var p = (qp('api') || '').trim();
+  if (p.indexOf('https://') === 0) return p.replace(/\/+$/, '');
+  var baked = 'https://hara-search.laynenorstrud.workers.dev';
+  return baked.indexOf('{{') === 0 ? '' : baked.replace(/\/+$/, '');
+})();
+
+function canSearch() {
+  /* Нужны ОБА: адрес и подпись Telegram. Без подписи эндпоинт откажет - и правильно
+     сделает, иначе он публичный прокси к нашей квоте. */
+  try { return !!(API_BASE && TG && TG.initData); } catch (e) { return false; }
+}
+
 var BOT = (function () {
   var p = (qp('bot') || '').replace(/[^A-Za-z0-9_]/g, '').slice(0, 40);
   if (p) return p;
