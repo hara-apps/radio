@@ -178,7 +178,30 @@
     background: var(--accent); color: var(--accent-fg); border-color: var(--accent);
   }
   .anote { color: var(--hint); font-size: 12px; max-width: 320px; line-height: 1.35; }
-  .astat { color: var(--hint); font-size: 12px; min-height: 16px; margin-top: 4px; }
+  /* pre-line, потому что ответ бота МНОГОСТРОЧНЫЙ: «👍 Артист / Трек» плюс причина, по
+     которой что-то не вышло. В одну строку это склеивалось бы в кашу. */
+  .astat { color: var(--hint); font-size: 12px; min-height: 16px; margin-top: 4px;
+           white-space: pre-line; max-width: 340px; }
+  /* ОТВЕТ БОТА ПРЯМО ЗДЕСЬ (заход 2). Раньше его можно было прочитать только в чате, то
+     есть выйдя из плеера; теперь он приезжает на то же место, где стоял палец.
+     Список ограничен по высоте и прокручивается ВНУТРИ СЕБЯ: «мои аудио» это два десятка
+     строк, и растягивать ими экран значило бы прятать плеер под списком. */
+  .apanel { width: min(100%, 340px); margin-top: 8px; display: flex; flex-direction: column;
+            gap: 6px; }
+  .apanel .ahead { color: var(--hint); font-size: 12px; text-align: left; }
+  .alist { max-height: 40vh; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+  .alist button, .apanel .chip {
+    text-align: left; padding: 9px 10px; border-radius: 10px; min-height: 40px;
+    border: 1px solid var(--line); background: var(--card); color: var(--fg);
+    font: inherit; font-size: 14px; cursor: pointer;
+  }
+  .apanel .row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .apanel input {
+    width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--card); color: var(--fg); font: inherit; font-size: 14px;
+  }
+  .alink { display: block; color: var(--accent); font-size: 13px; text-decoration: none;
+           padding: 4px 0; }
   .agap { width: min(100%, 240px); border-top: 1px solid var(--line); margin: 10px 0 4px; }
   /* ряд действий под роликом: тот же набор, но на своём месте - полноэкранный экран
      накрыл бы плеер, а прятать его нельзя */
@@ -439,6 +462,42 @@ var STR = {
                en: 'On air, 👍 and 👎 are about the TRACK: they take you to the chat, ' +
                    'where I name it right away. Otherwise I would remember the station ' +
                    'instead of the song. The "↩️ Back to the player" button brings you back.' },
+  a_mine:    { ru: 'Мои аудио',                  en: 'My audio' },
+  /* ПОДПИСИ ПРИ ЖИВОМ ЯЩИКЕ ГОВОРЯТ ДРУГОЕ, потому что и поведение другое: ни одна кнопка
+     больше не уводит, а в чат уезжает только то, что физически не может приехать сюда. */
+  a_hint_live: { ru: 'Отвечаю прямо здесь: 👍 в эфире - и я скажу, что играет. Музыка не ' +
+                     'прерывается.',
+                 en: 'I answer right here: tap 👍 on air and I will name what is playing. ' +
+                     'The music keeps going.' },
+  a_hint_box: { ru: '⏺ пришлёт кусок файлом в чат, 🎧 подберёт под настроение прямо тут, ' +
+                    '🎵 покажет твои записи. Плеер не закрывается.',
+                en: '⏺ sends a piece to the chat as a file, 🎧 picks a set right here, ' +
+                    '🎵 shows your recordings. The player stays open.' },
+  r_wait:    { ru: 'Спрашиваю бота...',          en: 'Asking the bot...' },
+  r_id:      { ru: 'Слушаю эфир и узнаю трек, это секунд двадцать...',
+               en: 'Listening to the air to name the track, about twenty seconds...' },
+  r_star:    { ru: 'Кладу в избранное...',       en: 'Adding to favourites...' },
+  r_rec:     { ru: 'Пишу кусок эфира, это около полутора минут...',
+               en: 'Recording a piece of air, about a minute and a half...' },
+  r_mine_w:  { ru: 'Достаю твои записи...',      en: 'Fetching your recordings...' },
+  r_clip:    { ru: 'Отправляю запись в чат...',  en: 'Sending the recording to the chat...' },
+  r_dj_wait: { ru: 'Собираю подборку...',        en: 'Putting a set together...' },
+  r_dj_ask:  { ru: 'Что сейчас под настроение? Скажи словами.',
+               en: 'What suits your mood right now? Say it in your own words.' },
+  r_dj_ph:   { ru: 'под дождь, для работы, потанцевать',
+               en: 'for the rain, for work, to dance' },
+  r_dj_go:   { ru: 'Подобрать',                  en: 'Pick for me' },
+  r_dj_h:    { ru: 'Играет прямо здесь:',        en: 'Plays right here:' },
+  r_mine_h:  { ru: 'Твои записи. Тап - и пришлю файлом в чат:',
+               en: 'Your recordings. Tap and I will send the file to the chat:' },
+  r_ok:      { ru: 'Готово',                     en: 'Done' },
+  /* ТРИ РАЗНЫХ ИСХОДА - ТРИ РАЗНЫХ ТЕКСТА, потому что делать по ним надо разное:
+     не дождались (бот занят, попробуй ещё), ответ забрали (обычно им же), не отправилось. */
+  r_slow:    { ru: 'Бот пока не ответил. Загляни в чат: ответ придёт туда.',
+               en: 'No answer yet. Check the chat, the reply will arrive there.' },
+  r_gone:    { ru: 'Ответ уже забран.',          en: 'The reply has already been taken.' },
+  r_fail:    { ru: 'Не дозвонился до бота. Отметки сохранены, попробуй ещё раз.',
+               en: 'Could not reach the bot. Your marks are saved, try again.' },
   a_saved:   { ru: 'Запомнил: {x}',              en: 'Saved: {x}' },
   a_sent:    { ru: 'Отправил боту',              en: 'Sent to the bot' },
   /* СКОЛЬКО ЖДЁТ ОТПРАВКИ. Копится локально, потому что каждая отправка это переход в
@@ -1365,12 +1424,41 @@ function sigAdd(a, it) {
   return r;
 }
 
+/* ОТМЕЧЕННОЕ, ЧТО УЖЕ УЕХАЛО. Отдельно от очереди отправки, и это не дублирование: очередь
+   отвечает на вопрос «что ещё НЕ доехало до бота», а этот список - на вопрос «что человек
+   уже нажимал». С ящиком сигнал уходит немедленно и в очереди не задерживается вовсе, и
+   если бы кнопка красилась только по очереди, она гасла бы в тот же миг - выглядело бы
+   так, будто тап не сработал. Класть отправленное обратно в очередь нельзя: оно уехало бы
+   ещё раз при следующем переходе, и бот посчитал бы лайк дважды. */
+var LS_MARK = 'hara_marks';
+var MARK_MAX = 60;
+
+function markSeen(a, r) {
+  if (!r) return;
+  try {
+    var m = JSON.parse(localStorage.getItem(LS_MARK) || '[]');
+    m = m.filter(function (x) {
+      /* 👍 ПОСЛЕ 👎 - ЭТО ИСПРАВЛЕНИЕ, а не второй сигнал: пара взаимоисключающая, ⭐
+         живёт отдельно (избранное это не оценка). Правило то же, что в очереди. */
+      if (x.ty !== r.ty || x.ref !== r.ref) return true;
+      return !((a !== 's' && x.a !== 's') || x.a === a);
+    });
+    m.push({ a: a, ty: r.ty, ref: r.ref });
+    localStorage.setItem(LS_MARK, JSON.stringify(m.slice(-MARK_MAX)));
+  } catch (e) {}
+}
+
 function sigMarks(it) {
   /* Что уже отмечено у ЭТОГО объекта: кнопка обязана показывать состояние сразу, не
      дожидаясь бота. Избранное берётся ещё и из общего списка - оно переживает отправку. */
   var r = refOf(it), out = {};
   if (!r) return out;
   sigLoad().forEach(function (s) { if (s.ty === r.ty && s.ref === r.ref) out[s.a] = 1; });
+  try {
+    JSON.parse(localStorage.getItem(LS_MARK) || '[]').forEach(function (s) {
+      if (s.ty === r.ty && s.ref === r.ref) out[s.a] = 1;
+    });
+  } catch (e) {}
   if (r.ty === 'r' && favIds().indexOf(r.ref) >= 0) out.s = 1;
   return out;
 }
@@ -1436,6 +1524,244 @@ function send(cmd, label, solo) {
   paintActs(state.cur);
 }
 
+/* ═══ СИГНАЛЫ ЧЕРЕЗ ЯЩИК (ЗАХОД 2 ЕДИНОГО ОКНА) ══════════════════════════════════════
+   ДО ЭТОГО у аппки было ровно два способа сказать что-то боту, и ОБА прерывали
+   прослушивание: sendData работает только у аппки, открытой reply-кнопкой, и по контракту
+   её ЗАКРЫВАЕТ; deep-link уводит в чат. Поэтому «понравилось» стоило перехода, а узнать
+   ответ бота можно было только выйдя отсюда.
+   ТЕПЕРЬ ЕСТЬ ТРЕТИЙ: наш эндпоинт. Аппка КЛАДЁТ туда сигнал, бот его ЗАБИРАЕТ и КЛАДЁТ
+   ОТВЕТ, аппка ответ показывает - на том же месте, где стоял палец. Музыка не прерывается
+   ни разу.
+   DEEP-LINK ОСТАЛСЯ ФОЛБЭКОМ, а не исчез: клиенты ниже 7.0, открытие мимо Telegram и
+   случай «ящик не отвечает» обязаны продолжать работать. Ветка одна и та же кнопка -
+   разница только в том, куда уедет тап. */
+var SIG_STEPS = [700, 900, 1200, 1600, 2000, 3000];
+/* ПОЧЕМУ ТАК ДОЛГО ЖДЁМ. Опознание трека это двадцать секунд записи эфира плюс ответ
+   AudD, запись куска - полторы минуты по построению. Сдаться раньше значит показать
+   «не вышло» там, где всё идёт по плану. */
+var SIG_TRIES = 60;
+
+function canSignal() {
+  /* Те же два условия, что у поиска: адрес ящика и подпись Telegram. Нет их - тап уезжает
+     старым способом, через чат, и человеку это сказано подписью. */
+  return canSearch();
+}
+
+function sigPost(kind, body) {
+  var b = body || {};
+  b.kind = kind;
+  return fetch(API_BASE + '/signal', {
+    method: 'POST',
+    headers: { 'X-Init-Data': (TG && TG.initData) || '', 'Content-Type': 'application/json' },
+    body: JSON.stringify(b)
+  }).then(function (r) { return r.json(); });
+}
+
+function sigPoll(id, n, done, fail) {
+  if (n > SIG_TRIES) { fail('slow'); return; }
+  setTimeout(function () {
+    fetch(API_BASE + '/result?id=' + encodeURIComponent(id),
+          { headers: { 'X-Init-Data': (TG && TG.initData) || '' } })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (j && j.state === 'done') { done(j.res || {}); return; }
+        /* gone = строку уже забрали или она протухла. Ошибкой это не называем: чаще всего
+           это второй опрос той же готовой работы. */
+        if (j && j.state === 'gone') { fail('gone'); return; }
+        sigPoll(id, n + 1, done, fail);
+      })
+      .catch(function () { sigPoll(id, n + 1, done, fail); });
+  }, SIG_STEPS[Math.min(n, SIG_STEPS.length - 1)]);
+}
+
+function relay(kind, body, waitKey, onFail) {
+  /* ОДИН ТАП - ОДИН СИГНАЛ, И ЧЕЛОВЕК ОСТАЁТСЯ ЗДЕСЬ. -> true, если ушло ящиком.
+
+     ФОЛБЭК ОБЯЗАТЕЛЕН, И ЕГО ОТСУТСТВИЕ - ЭТО ПОТЕРЯ СИГНАЛА. Ящик может не ответить
+     (сеть, деплой, чужой сбой), и тап, который «ушёл в никуда», человек считает
+     сработавшим. Поэтому у каждого вызова есть onFail: он возвращает тап на прежний путь -
+     локальную очередь или переход в чат. Это разные вещи по смыслу, и решает вызывающий,
+     а не эта функция.
+     НЕ ДОЖДАЛИСЬ - НЕ ТО ЖЕ САМОЕ, ЧТО НЕ ОТПРАВИЛОСЬ: сигнал у бота, работа идёт, и
+     ответ придёт в чат (он сам его дошлёт). Дублировать его локальной очередью значило бы
+     сделать ту же работу дважды. */
+  if (!canSignal()) return false;
+  haptic('light');
+  note(t(waitKey || 'r_wait'));
+  sigPost(kind, body).then(function (j) {
+    if (!j || !j.id) {
+      /* ПРИЧИНЫ ОТКАЗА ТЕ ЖЕ, ЧТО У ПОИСКА, и разбираются тем же реестром: протухшая
+         подпись чинится переоткрытием, несошедшаяся - не чинится вовсе, а «нет initData»
+         значит, что плеер открыт мимо Telegram. Одна фраза на все случаи отправляла бы
+         человека чинить не то. */
+      var k = YT_ERR[(j || {}).error];
+      note(k ? t(k[1]) : t('r_fail'));
+      if (onFail) onFail();
+      return;
+    }
+    sigPoll(j.id, 0, function (res) { showRes(res, kind); }, function (why) {
+      note(t(why === 'gone' ? 'r_gone' : 'r_slow'));
+    });
+  }).catch(function () {
+    note(t('r_fail'));
+    if (onFail) onFail();
+  });
+  return true;
+}
+
+function setFav(list) {
+  /* СПИСОК ИЗБРАННОГО ЗАМЕНЯЕТСЯ ЦЕЛИКОМ ТЕМ, ЧТО ПРИСЛАЛ БОТ. Не мержится: хозяин
+     списка один (закон о едином источнике), и слияние вернуло бы станцию, удалённую в
+     чате, - человек увидел бы то, чего у него уже нет. */
+  try { localStorage.setItem(LS_FAV, JSON.stringify((list || []).slice(0, 40))); }
+  catch (e) {}
+}
+
+function panel(clear) {
+  /* Место под ответ бота живёт ВНУТРИ той же коробки действий, что и кнопки: ответ на тап
+     обязан появляться там, где был тап, а не «где-нибудь на экране». */
+  var box = actsBox(state.cur), p = box.querySelector('.apanel');
+  if (!p) {
+    p = document.createElement('div');
+    p.className = 'apanel';
+    box.insertBefore(p, box.querySelector('.astat') || null);
+  }
+  if (clear) p.innerHTML = '';
+  return p;
+}
+
+function showRes(res, kind) {
+  var out = [], p;
+  /* ПОРЯДОК ВАЖЕН И ПОЙМАН НА СЕБЕ: paintActs собирает коробку С НУЛЯ, поэтому панель и
+     строка статуса строятся ПОСЛЕ неё - иначе ответ бота стирается собственной
+     перерисовкой ровно в тот момент, когда он пришёл. */
+  /* СПИСОК ИЗБРАННОГО ПРИМЕНЯЕТСЯ ТОЛЬКО В ОТВЕТ НА ⭐, и это не перестраховка: в JS
+     пустой массив ИСТИНЕН, поэтому «есть ли поле» здесь означало бы «любой ответ бота без
+     избранного стирает избранное». Спросили про избранное - берём ответ; не спрашивали -
+     не трогаем. */
+  if (kind === 'star' && res.fav) { setFav(res.fav); paintChips(); }
+  /* ПЕРЕРИСОВЫВАЕМ КНОПКИ ТОЛЬКО ТАМ, ГДЕ ИЗМЕНИЛОСЬ ИХ СОСТОЯНИЕ. paintActs собирает
+     коробку с нуля, а вместе с ней сносит и панель - то есть список «моих аудио» исчезал
+     бы после первой же отправленной записи, хотя человек пришёл выбрать несколько. */
+  if (kind === 'like' || kind === 'dislike' || kind === 'star') {
+    paintActs(state.cur, true);
+  }
+  if (res.say) out.push(res.say);
+  (res.lines || []).forEach(function (x) { out.push('· ' + x); });
+  if (res.note) out.push(res.note);
+  note(out.join('\n') || t('r_ok'));
+  if (res.links && res.links.length) {
+    p = panel(true);
+    res.links.slice(0, 6).forEach(function (l) {
+      var a = document.createElement('a');
+      a.className = 'alink';
+      a.textContent = '· ' + l[0];
+      a.href = l[1];
+      a.addEventListener('click', function (ev) {
+        /* ВНЕШНЯЯ ССЫЛКА - ЧЕРЕЗ SDK, а не переходом вебвью: иначе плеер уедет на чужой
+           сайт и музыка оборвётся ровно так же, как от deep-link. */
+        ev.preventDefault();
+        try { TG.openLink(l[1]); } catch (e) { window.open(l[1], '_blank'); }
+      });
+      p.appendChild(a);
+    });
+  }
+  if (res.items && res.items.length) { showItems(res.items, kind); }
+}
+
+function djStation(x) {
+  /* Станция из подборки диджея - в ТОЙ ЖЕ форме, что из каталога: плеер не должен знать,
+     откуда она приехала. */
+  return { id: x.id, name: x.nm || '?', url: x.url || '', icon: '', country: '',
+           bitrate: 0, tags: x.tags || '', artist: t('ms_artist'), sub: x.tags || '' };
+}
+
+function showItems(items, kind) {
+  var p = panel(true), head = document.createElement('div'), list = document.createElement('div');
+  head.className = 'ahead';
+  head.textContent = t(kind === 'mine' ? 'r_mine_h' : 'r_dj_h');
+  list.className = 'alist';
+  p.appendChild(head);
+  p.appendChild(list);
+  var objs = items.map(function (x) {
+    return (kind === 'mine') ? null
+      : (x.kind === 'yt'
+         ? ytItem({ id: x.id, title: x.nm, artist: x.artist || '', sec: x.sec || 0,
+                    thumb: x.thumb || '' })
+         : djStation(x));
+  });
+  /* ПОДБОРКА ЛОЖИТСЯ И В ОСНОВНОЙ СПИСОК, а не только в панель. Панель живёт в
+     полноэкранном плеере и исчезает при первом же выборе (тот перерисовывает экран под
+     новую станцию), и человек остался бы с одним треком из десяти. Список за спиной
+     переживает всё и ведёт себя как обычная выдача - тапать по нему можно сколько угодно. */
+  if (kind !== 'mine') {
+    state.items = objs.filter(Boolean);
+    state.q = '';
+    render();
+  }
+  items.forEach(function (x, i) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    if (kind === 'mine') {
+      b.textContent = '🎧 ' + (x.nm || '?') + (x.ts ? '  ·  ' + dstamp(x.ts) : '');
+      /* ТАП ПО ЗАПИСИ ОТПРАВЛЯЕТ ЕЁ В ЧАТ, А НЕ УВОДИТ ТУДА. Файл живёт только в Bot API
+         (file_id в вебе не открывается ни одним способом), поэтому прийти он может
+         только в переписку - но РЕШАТЬ, идти ли туда, человек будет сам. */
+      b.addEventListener('click', function () { relay('clip', { n: x.n }, 'r_clip'); });
+    } else {
+      b.textContent = (x.kind === 'yt' ? '▶️ ' : '📻 ') + (x.nm || '?')
+        + (x.artist ? '  ·  ' + x.artist : '');
+      b.addEventListener('click', function () { pick(objs[i], true); });
+    }
+    list.appendChild(b);
+  });
+}
+
+function dstamp(ts) {
+  try {
+    var d = new Date(ts * 1000);
+    return ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2);
+  } catch (e) { return ''; }
+}
+
+function djAsk() {
+  /* НАСТРОЕНИЕ СПРАШИВАЕТСЯ ЗДЕСЬ, а не в чате: ради одного слова уводить человека из
+     эфира - это ровно тот уход, который заход 2 и убирает.
+     СПИСКА НАСТРОЕНИЙ В СТРАНИЦЕ НЕТ НАРОЧНО: реестр живёт у бота (dj.MOOD_TAGS), и
+     вторая его копия здесь разошлась бы с первой. В подсказке стоят примеры, а не
+     варианты выбора - слова человека резолвит бот. */
+  var p = panel(true), inp = document.createElement('input'), row = document.createElement('div');
+  var head = document.createElement('div');
+  head.className = 'ahead';
+  head.textContent = t('r_dj_ask');
+  inp.type = 'text';
+  inp.placeholder = t('r_dj_ph');
+  inp.maxLength = 80;
+  row.className = 'row';
+  var go = document.createElement('button');
+  go.type = 'button';
+  go.className = 'chip';
+  go.textContent = t('r_dj_go');
+  function fire() {
+    var m = (inp.value || '').trim();
+    if (!m) { inp.focus(); return; }
+    panel(true);
+    /* ЯЩИК НЕ ОТВЕТИЛ - УХОДИМ ПРЕЖНИМ ПУТЁМ, но настроение при этом ТЕРЯЕТСЯ: в 64
+       символа команды слова не уложить, и бот переспросит его в чате. Это сказано
+       строкой, а не выясняется молчанием. */
+    if (!relay('dj', { mood: m }, 'r_dj_wait', function () { send('j', t('a_dj')); })) {
+      send('j', t('a_dj'));
+    }
+  }
+  go.addEventListener('click', fire);
+  inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') fire(); });
+  p.appendChild(head);
+  p.appendChild(inp);
+  row.appendChild(go);
+  p.appendChild(row);
+  try { inp.focus(); } catch (e) {}
+}
+
 function haptic(kind) {
   try { if (TG && TG.HapticFeedback) TG.HapticFeedback.impactOccurred(kind || 'light'); }
   catch (e) {}
@@ -1466,29 +1792,50 @@ function paintActs(it, keep) {
   rowA.className = 'arow';
   if (r) {
     mkBtn(rowA, '⭐', 'a_star', marks.s, function () {
+      /* ЛОКАЛЬНО - СРАЗУ, ЧТОБЫ ЧИП ПОЯВИЛСЯ В ТОТ ЖЕ ТАП; хозяин списка при этом бот, и
+         его ответ (полный набор) локальный список ЗАМЕНИТ. Без ящика остаётся только
+         локальная часть плюс очередь на попутную отправку. */
       if (r.ty === 'r') { rememberFav(r.ref); paintChips(); }
-      mark('s', it, '⭐');
+      if (!relay('star', { ty: r.ty, ref: r.ty === 'r' ? (packUuid(r.ref) || r.ref) : r.ref,
+                           nm: r.nm }, 'r_star', function () { mark('s', it, '⭐'); })) {
+        mark('s', it, '⭐');
+      }
     });
-    /* У РОЛИКА YOUTUBE НАЗВАНИЕ УЖЕ ЕСТЬ, опознавать нечего - значит и спешить некуда:
-       отметка пишется на месте и уезжает попутно, как ⭐. Немедленная отправка нужна
-       ровно там, где смысл сигнала портится со временем, то есть в живом эфире. */
-    if (r.ty !== 'r') {
-      mkBtn(rowA, '👍', 'a_like', marks.l, function () { mark('l', it, '👍'); });
-      mkBtn(rowA, '👎', 'a_no', marks.d, function () { mark('d', it, '👎'); });
+    /* 👍/👎 В ЭФИРЕ - ПРО ТРЕК, и смысл у них портится со временем: к отправке «трёх
+       накопленных» играет уже другое. Раньше это заставляло уводить человека в чат, чтобы
+       бот опознал трек в тот же момент. ТЕПЕРЬ ЯЩИК ДЕЛАЕТ ТО ЖЕ САМОЕ БЕЗ ПЕРЕХОДА:
+       сигнал уходит немедленно, ответ («Артист / Трек») приходит сюда же. Ящика нет -
+       остаётся прежний путь через чат, он живёт в нижней группе. */
+    if (r.ty !== 'r' || canSignal()) {
+      ['👍', '👎'].forEach(function (ic, i) {
+        var a = i ? 'd' : 'l';
+        mkBtn(rowA, ic, i ? 'a_no' : 'a_like', i ? marks.d : marks.l, function () {
+          if (r.ty !== 'r') { mark(a, it, ic); return; }
+          markSeen(a, r);           /* кнопка загорается в тот же тап, как и раньше */
+          relay(i ? 'dislike' : 'like', { ty: r.ty, ref: packUuid(r.ref) || r.ref }, 'r_id',
+                function () { mark(a, it, ic); });
+        });
+      });
     }
     box.appendChild(rowA);
     if (it && it.yt) { box.dataset.solo = '1'; }
     var n1 = document.createElement('div');
     n1.className = 'anote';
-    n1.textContent = ((it && it.yt) ? t('a_hint_y') : t('a_hint1'))
+    n1.textContent = ((it && it.yt) ? t('a_hint_y')
+                      : (canSignal() ? t('a_hint_live') : t('a_hint1')))
       + (q.length ? ' ' + t('a_queue').replace('{n}', String(q.length)) : '');
     box.appendChild(n1);
   }
-  /* ГРУППА ПЕРЕХОДА. Без имени бота уходить некуда - кнопок нет вовсе, а отметки выше
-     продолжают работать: они локальные и ждут своего часа.
-     У РОЛИКА ОТДЕЛЬНОЙ ГРУППЫ НЕТ: там переход только у 🎧, и ради одной кнопки черта с
+  /* ВТОРАЯ ГРУППА - «ПОПРОСИТЬ БОТА». Её смысл изменился с заходом 2: раньше КАЖДАЯ её
+     кнопка уводила в чат, теперь при живом ящике ни одна не уводит - в чат уезжает только
+     то, что физически не может приехать сюда (файл записи, подборка из фонотеки), и об
+     этом говорит ответ, а не сам переход.
+     БЕЗ ЯЩИКА И БЕЗ ИМЕНИ БОТА идти некуда - кнопок нет вовсе, а отметки выше продолжают
+     работать: они локальные и ждут своего часа.
+     У РОЛИКА ОТДЕЛЬНОЙ ГРУППЫ НЕТ: там всё умещается в один ряд, и ради этого черта с
      подписью съедали бы семьдесят пикселей на экране, где главное - сам плеер. */
-  if (BOT && BOT.indexOf('{{') !== 0) {
+  var box2 = canSignal();
+  if (box2 || (BOT && BOT.indexOf('{{') !== 0)) {
     var solo = !!(it && it.yt);
     if (!solo) {
       var gap = document.createElement('div');
@@ -1497,12 +1844,10 @@ function paintActs(it, keep) {
     }
     var rowB = solo ? rowA : document.createElement('div');
     rowB.className = 'arow';
-    if (r && r.ty === 'r') {
-      /* 👍 и 👎 В ЭФИРЕ - ПРО ТРЕК, а не про станцию, и поэтому уходят НЕМЕДЛЕННО: бот в
-         тот же момент спрашивает у AudD, что звучит. Копить их пачкой нельзя ни при
-         каких удобствах - к отправке «трёх накопленных» играет уже другое, и мы
-         запомнили бы не ту песню. Станций у человека десяток, треков тысячи: отметка
-         «понравилось MANGORADIO» не стоит ничего (живой прогон Ren). */
+    if (r && r.ty === 'r' && !box2) {
+      /* ФОЛБЭК: ящика нет, а копить 👍 по эфиру нельзя ни при каких удобствах - к отправке
+         «трёх накопленных» играет уже другое, и мы запомнили бы не ту песню. Значит
+         остаётся переход: он честнее подмены. */
       ['👍', '👎'].forEach(function (ic, i) {
         mkBtn(rowB, ic, i ? 'a_no' : 'a_like', false, function () {
           var c = cmdToken(i ? 'd' : 'l', it);
@@ -1512,20 +1857,34 @@ function paintActs(it, keep) {
     }
     if (r && r.ty === 'r') {
       mkBtn(rowB, '⏺', 'a_rec', false, function () {
-        var c = cmdToken('r', it);
-        if (c) send(c.tok, t('a_rec'), c.solo);
+        /* ЗАПИСЬ ОСТАЁТСЯ ДЕЛОМ БОТА (ffmpeg пишет то, что звучит СЕЙЧАС), но переход
+           больше не нужен: файл уедет в чат сам, а сюда придёт «записано». */
+        var back = function () {
+          var c = cmdToken('r', it);
+          if (c) send(c.tok, t('a_rec'), c.solo);
+        };
+        if (!relay('rec', { ty: 'r', ref: packUuid(r.ref) || r.ref }, 'r_rec', back)) back();
       });
     }
-    mkBtn(rowB, '🎧', 'a_dj', false, function () { send('j', t('a_dj')); });
-    if (q.length) {
+    mkBtn(rowB, '🎧', 'a_dj', false, function () {
+      if (canSignal()) { djAsk(); return; }
+      send('j', t('a_dj'));
+    });
+    mkBtn(rowB, '🎵', 'a_mine', false, function () {
+      /* ФОЛБЭК УВОЗИТ И НАКОПЛЕННОЕ: раз уж переход всё равно случился, отдельная
+         синхронизация тех же отметок была бы вторым прерыванием на ровном месте. */
+      var back = function () { send('m', t('a_mine')); };
+      if (!relay('mine', {}, 'r_mine_w', back)) back();
+    });
+    if (q.length && !box2) {
       mkBtn(rowB, '📤', 'a_sync', false, function () { send('', t('a_sync')); });
     }
     if (!solo) { box.appendChild(rowB); }
     if (!(it && it.yt)) {
-      // у ролика вторая группа это один 🎧, и объяснять там нечего - строка выше уже сказала
+      // у ролика вторая группа это один ряд, и объяснять там нечего - строка выше сказала
       var n2 = document.createElement('div');
       n2.className = 'anote';
-      n2.textContent = t('a_hint2');
+      n2.textContent = t(box2 ? 'a_hint_box' : 'a_hint2');
       box.appendChild(n2);
     }
   }
@@ -1719,7 +2078,7 @@ elQ.addEventListener('input', function () {
    и перезагружаемся ОДИН раз при расхождении.
    Защита от цикла обязательна: если version.txt почему-то всегда отличается (не доложили
    при деплое, отдаётся не тот файл), без флага страница перезагружалась бы вечно. */
-var VERSION = '5594370a72b8';
+var VERSION = '3ff444c572db';
 /* ИМЯ БОТА ПРИХОДИТ ПАРАМЕТРОМ ССЫЛКИ, а зашитое при выкладке - только фолбэк.
    ПОЧЕМУ ТАК. Страница ОДНА на всех ботов, а деплоить её могут и с прода, и со стенда.
    Зашитое при сборке имя означает: выложил со стенда - у всех на проде кнопки ведут в
@@ -1747,7 +2106,7 @@ function canSearch() {
 var BOT = (function () {
   var p = (qp('bot') || '').replace(/[^A-Za-z0-9_]/g, '').slice(0, 40);
   if (p) return p;
-  var baked = 'harecrypta_digest_bot';
+  var baked = 'theundertaker_test_bot';
   return baked.indexOf('{{') === 0 ? '' : baked;
 })();
 
