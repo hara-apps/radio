@@ -359,11 +359,24 @@ var STR = {
                en: 'Your searches for today are used up' },
   yt_u_b:    { ru: 'Квота общая, поэтому у каждого свой кусок. Вернётся ночью.',
                en: 'The quota is shared, so everyone gets a slice. It comes back at night.' },
-  yt_a_h:    { ru: 'Telegram не подтвердил, что это ты',
-               en: 'Telegram did not confirm it is you' },
-  yt_a_b:    { ru: 'Так бывает, если плеер открыт очень давно. Закрой и открой заново.',
-               en: 'That happens when the player has been open for a long time. Close and '
-                 + 'open it again.' },
+  /* ТРИ ПРИЧИНЫ ОТКАЗА - ТРИ РАЗНЫХ ТЕКСТА. Одна фраза на все случаи отправляла человека
+     чинить не то: он закрывал и открывал аппку, а подпись не сходилась по другой причине
+     (ловили этим живьём). Что именно случилось, Worker называет в ответе. */
+  yt_a_h:    { ru: 'Открой плеер заново',        en: 'Reopen the player' },
+  yt_a_b:    { ru: 'Подпись Telegram протухла: она выдаётся при открытии и живёт сутки. ' +
+                   'Закрой аппку и открой снова.',
+               en: 'The Telegram signature expired: it is issued when the app opens and ' +
+                   'lives a day. Close the app and open it again.' },
+  yt_s_h:    { ru: 'Подпись не сошлась',         en: 'Signature did not match' },
+  yt_s_b:    { ru: 'Это наша сторона: бот и плеер разошлись в проверке. Скажи Ren, ' +
+                   'починим - открывать и закрывать бесполезно.',
+               en: 'That is our side: the bot and the player disagree on validation. Tell ' +
+                   'Ren, we will fix it - reopening will not help.' },
+  yt_i_h:    { ru: 'Плеер открыт не из Telegram', en: 'The player is not open from Telegram' },
+  yt_i_b:    { ru: 'Поиск работает только внутри Telegram: снаружи подтвердить, что это ты, ' +
+                   'нечем. Открой плеер кнопкой из чата.',
+               en: 'Search works only inside Telegram: outside there is nothing to confirm ' +
+                   'it is you. Open the player with the button in the chat.' },
   yt_d_h:    { ru: 'Поиск не ответил',           en: 'Search did not answer' },
   yt_d_b:    { ru: 'Это наша сторона, не твоя. Можно попробовать ещё раз.',
                en: 'That is our side, not yours. You can try again.' },
@@ -687,6 +700,22 @@ function rememberFav(id) {
 }
 
 
+function byUuid(ids) {
+  /* Две формы запроса каталога: путь и параметр. Пустой ответ у radio-browser неотличим
+     от «нет такой станции», поэтому пробуем обе - как это делает бот. */
+  var one = [].concat(ids).join(',');
+  return fetch(API + '/json/stations/byuuid/' + encodeURIComponent(one))
+    .then(function (r) {
+      if (r.ok) {
+        return r.clone().json().then(function (j) {
+          return (j && j.length) ? r : fetch(API + '/json/stations/byuuid?uuids='
+                                             + encodeURIComponent(one));
+        });
+      }
+      return fetch(API + '/json/stations/byuuid?uuids=' + encodeURIComponent(one));
+    });
+}
+
 function showFav(list) {
   /* Станции приезжают списком uuid, а не целиком: адрес кнопки не резиновый. Разворачиваем
      их через тот же каталог, которым пользуется весь раздел. */
@@ -696,7 +725,9 @@ function showFav(list) {
   paintTabs(); paintChips();
   var my = ++state.seq;
   showNote(t('loading'));
-  fetch(API + '/json/stations/byuuid?uuids=' + encodeURIComponent(ids.join(',')))
+  /* ФОРМА ЗАПРОСА ТА ЖЕ, ЧТО У БОТА, и обе пробуются в том же порядке: расхождение
+     здесь означало бы «в аппке станция есть, а бот её не находит» - ровно тот живой баг. */
+  byUuid(ids)
     .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function (rows) {
       if (my !== state.seq) return;
@@ -714,8 +745,12 @@ function showFav(list) {
 
 var YT_ERR = { quota: ['yt_q_h', 'yt_q_b'], userlimit: ['yt_u_h', 'yt_u_b'],
                nokey: ['yt_d_h', 'yt_d_b'], empty: ['yt_none_h', 'yt_none_b'],
-               no_initdata: ['yt_a_h', 'yt_a_b'], bad_sign: ['yt_a_h', 'yt_a_b'],
-               stale: ['yt_a_h', 'yt_a_b'], no_user: ['yt_a_h', 'yt_a_b'] };
+               /* РАЗНЫЕ ПРИЧИНЫ - РАЗНЫЕ ДЕЙСТВИЯ: протухло чинится переоткрытием,
+                  несошедшаяся подпись не чинится вообще (это наша сторона), а «нет
+                  initData» значит, что плеер открыт мимо Telegram. */
+               stale: ['yt_a_h', 'yt_a_b'],
+               bad_sign: ['yt_s_h', 'yt_s_b'], no_secret: ['yt_s_h', 'yt_s_b'],
+               no_initdata: ['yt_i_h', 'yt_i_b'], no_user: ['yt_i_h', 'yt_i_b'] };
 
 function ytSearch(q) {
   /* ПОИСК ЖИВЬЁМ, НЕ ВЫХОДЯ ИЗ ПЛЕЕРА. Подпись Telegram уходит заголовком: эндпоинт по
@@ -1684,7 +1719,7 @@ elQ.addEventListener('input', function () {
    и перезагружаемся ОДИН раз при расхождении.
    Защита от цикла обязательна: если version.txt почему-то всегда отличается (не доложили
    при деплое, отдаётся не тот файл), без флага страница перезагружалась бы вечно. */
-var VERSION = '5546fcdf1b1a';
+var VERSION = '5594370a72b8';
 /* ИМЯ БОТА ПРИХОДИТ ПАРАМЕТРОМ ССЫЛКИ, а зашитое при выкладке - только фолбэк.
    ПОЧЕМУ ТАК. Страница ОДНА на всех ботов, а деплоить её могут и с прода, и со стенда.
    Зашитое при сборке имя означает: выложил со стенда - у всех на проде кнопки ведут в
@@ -1778,7 +1813,7 @@ document.documentElement.lang = LANG;
   var id = (qp('station') || '').slice(0, 36);
   if (!/^[0-9a-fA-F-]{36}$/.test(id)) return;
   if (state.cur && state.cur.id === id) return;
-  fetch(API + '/json/stations/byuuid?uuids=' + encodeURIComponent(id))
+  byUuid([id])
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (rows) {
       var st = (rows && rows.length) ? stationOf(rows[0]) : null;
