@@ -335,6 +335,15 @@ var STR = {
                    'выключенным экраном звука не будет. Это их правила, не наша недоделка.',
                en: 'Plays in the YouTube player and only while the app is open: no ' +
                    'background or screen-off audio. Their rules, not our shortcoming.' },
+  /* НЕ СОБРАЛОСЬ - ГОВОРИМ ПРЯМО. Молча урезанная вкладка читается как «фичи нет вовсе»
+     (живой прогон Ren: чипа чартов не было, и выглядело это как отсутствие раздела). */
+  yt_off_h:  { ru: 'Чарт YouTube не собрался',   en: 'The YouTube chart did not build' },
+  yt_off_b:  { ru: 'У бота не настроен ключ YouTube, поэтому подборки тут нет. Найти ' +
+                   'конкретный трек можно в чате у Гробовщика, а «Открытия» рядом играют ' +
+                   'как обычно.',
+               en: 'The bot has no YouTube key configured, so there is no selection here. ' +
+                   'Search for a track in the chat with the Undertaker; "Discoveries" next ' +
+                   'to it plays as usual.' },
   yt_built:  { ru: 'Чарт собран {d}. Живой поиск по YouTube идёт в чате у Гробовщика.',
                en: 'Chart built {d}. Live YouTube search is in the chat with the Undertaker.' },
   /* ОТКАЗЫ ПЛЕЕРА РАЗНЫЕ ПО СМЫСЛУ, И ПУТАТЬ ИХ НЕЛЬЗЯ: «владелец запретил встраивание»
@@ -372,12 +381,16 @@ var STR = {
   a_sync:    { ru: 'Отправить боту',             en: 'Send to the bot' },
   /* ДВЕ ГРУППЫ - ДВЕ ПОДПИСИ. Верхняя ничего не прерывает, нижняя уводит в чат, и это
      сказано ДО тапа, а не выясняется после него. */
-  a_hint1:   { ru: 'Запоминаю на месте. Музыка играет, никуда не уходим.',
-               en: 'Saved right here. The music keeps playing, no navigation.' },
-  a_hint2:   { ru: 'Уводит в чат: файл и подборка приходят туда. Плеер свернётся, ' +
-                   'вернёт кнопка «↩️ Вернуться в плеер».',
-               en: 'Takes you to the chat: the file and the set arrive there. The player ' +
-                   'folds away, the "↩️ Back to the player" button brings it back.' },
+  a_hint1:   { ru: 'Запоминаю на месте: музыка играет, никуда не уходим. ⭐ это станция, ' +
+                   'а у ролика и название уже известно.',
+               en: 'Saved right here: the music keeps playing, no navigation. ⭐ is the ' +
+                   'station; a video already carries its own title.' },
+  a_hint2:   { ru: 'В эфире 👍 и 👎 про ТРЕК: уводят в чат, и там я сразу узнаю, что ' +
+                   'это было. Иначе пришлось бы запоминать станцию вместо песни. ' +
+                   'Вернёт кнопка «↩️ Вернуться в плеер».',
+               en: 'On air, 👍 and 👎 are about the TRACK: they take you to the chat, ' +
+                   'where I name it right away. Otherwise I would remember the station ' +
+                   'instead of the song. The "↩️ Back to the player" button brings you back.' },
   a_saved:   { ru: 'Запомнил: {x}',              en: 'Saved: {x}' },
   a_sent:    { ru: 'Отправил боту',              en: 'Sent to the bot' },
   /* СКОЛЬКО ЖДЁТ ОТПРАВКИ. Копится локально, потому что каждая отправка это переход в
@@ -673,6 +686,11 @@ function loadSection() {
 
   if (sec.kind === 'yt') {                         /* музыка: ютуб или открытия */
     var topic = state.ptopic || (DATA.music ? 'chart' : 'disc');
+    if (topic !== 'disc' && !DATA.music) {
+      state.items = [];
+      showNote(t('yt_off_h'), t('yt_off_b'));
+      return;
+    }
     var src = (topic === 'disc') ? DATA.disc : DATA.music;
     var rows = ((src || {}).tracks || []).filter(function (tr) {
       if (!q) return true;
@@ -1339,12 +1357,17 @@ function paintActs(it, keep) {
   var rowA = document.createElement('div');
   rowA.className = 'arow';
   if (r) {
-    mkBtn(rowA, '👍', 'a_like', marks.l, function () { mark('l', it, '👍'); });
-    mkBtn(rowA, '👎', 'a_no', marks.d, function () { mark('d', it, '👎'); });
     mkBtn(rowA, '⭐', 'a_star', marks.s, function () {
       if (r.ty === 'r') { rememberFav(r.ref); paintChips(); }
       mark('s', it, '⭐');
     });
+    /* У РОЛИКА YOUTUBE НАЗВАНИЕ УЖЕ ЕСТЬ, опознавать нечего - значит и спешить некуда:
+       отметка пишется на месте и уезжает попутно, как ⭐. Немедленная отправка нужна
+       ровно там, где смысл сигнала портится со временем, то есть в живом эфире. */
+    if (r.ty !== 'r') {
+      mkBtn(rowA, '👍', 'a_like', marks.l, function () { mark('l', it, '👍'); });
+      mkBtn(rowA, '👎', 'a_no', marks.d, function () { mark('d', it, '👎'); });
+    }
     box.appendChild(rowA);
     var n1 = document.createElement('div');
     n1.className = 'anote';
@@ -1359,6 +1382,19 @@ function paintActs(it, keep) {
     box.appendChild(gap);
     var rowB = document.createElement('div');
     rowB.className = 'arow';
+    if (r && r.ty === 'r') {
+      /* 👍 и 👎 В ЭФИРЕ - ПРО ТРЕК, а не про станцию, и поэтому уходят НЕМЕДЛЕННО: бот в
+         тот же момент спрашивает у AudD, что звучит. Копить их пачкой нельзя ни при
+         каких удобствах - к отправке «трёх накопленных» играет уже другое, и мы
+         запомнили бы не ту песню. Станций у человека десяток, треков тысячи: отметка
+         «понравилось MANGORADIO» не стоит ничего (живой прогон Ren). */
+      ['👍', '👎'].forEach(function (ic, i) {
+        mkBtn(rowB, ic, i ? 'a_no' : 'a_like', false, function () {
+          var c = cmdToken(i ? 'd' : 'l', it);
+          if (c) send(c.tok, t(i ? 'a_no' : 'a_like'), c.solo);
+        });
+      });
+    }
     if (r && r.ty === 'r') {
       mkBtn(rowB, '⏺', 'a_rec', false, function () {
         var c = cmdToken('r', it);
@@ -1500,8 +1536,10 @@ function paintChips() {
   } else if (sec.kind === 'yt') {
     /* ЧИП ЕСТЬ ТОЛЬКО У ДОЕХАВШЕГО ИСТОЧНИКА: чип, открывающий пустоту, хуже
        отсутствующего - то же правило, что у вкладок. */
-    list = [];
-    if (DATA.music) list.push({ id: 'chart', ru: t('yt_chart'), en: t('yt_chart') });
+    /* ЧИП ЧАРТА СТОИТ ВСЕГДА, даже когда снимок не доехал: иначе человек видит вкладку
+       с одними «Открытиями» и решает, что поиска по ютубу у бота нет вовсе. Пустой чип
+       здесь не «кнопка в никуда» - за ним экран, который НАЗЫВАЕТ причину. */
+    list = [{ id: 'chart', ru: t('yt_chart'), en: t('yt_chart') }];
     if (DATA.disc) list.push({ id: 'disc', ru: t('yt_disc'), en: t('yt_disc') });
   } else {
     list = [{ id: '', ru: t('p_all'), en: t('p_all') }].concat(
@@ -1560,7 +1598,7 @@ elQ.addEventListener('input', function () {
    и перезагружаемся ОДИН раз при расхождении.
    Защита от цикла обязательна: если version.txt почему-то всегда отличается (не доложили
    при деплое, отдаётся не тот файл), без флага страница перезагружалась бы вечно. */
-var VERSION = 'abbcd9f4ab92';
+var VERSION = '0540d42bdfc4';
 /* ИМЯ БОТА ПРИХОДИТ ПАРАМЕТРОМ ССЫЛКИ, а зашитое при выкладке - только фолбэк.
    ПОЧЕМУ ТАК. Страница ОДНА на всех ботов, а деплоить её могут и с прода, и со стенда.
    Зашитое при сборке имя означает: выложил со стенда - у всех на проде кнопки ведут в
@@ -1571,7 +1609,7 @@ var VERSION = 'abbcd9f4ab92';
 var BOT = (function () {
   var p = (qp('bot') || '').replace(/[^A-Za-z0-9_]/g, '').slice(0, 40);
   if (p) return p;
-  var baked = 'harecrypta_digest_bot';
+  var baked = 'theundertaker_test_bot';
   return baked.indexOf('{{') === 0 ? '' : baked;
 })();
 
