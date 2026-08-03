@@ -1734,7 +1734,7 @@ var VERSION = '5594370a72b8';
 var API_BASE = (function () {
   var p = (qp('api') || '').trim();
   if (p.indexOf('https://') === 0) return p.replace(/\/+$/, '');
-  var baked = '{{API}}';
+  var baked = 'https://hara-search.laynenorstrud.workers.dev';
   return baked.indexOf('{{') === 0 ? '' : baked.replace(/\/+$/, '');
 })();
 
