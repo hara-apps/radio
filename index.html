@@ -415,8 +415,21 @@ var STR = {
   yt_built:  { ru: 'Чарт собран {d}. Ищи что угодно строкой выше, не выходя из плеера.',
                en: 'Chart built {d}. Search for anything in the field above, without ' +
                    'leaving the player.' },
-  yt_built_c: { ru: 'Чарт собран {d}. Живой поиск по YouTube идёт в чате у Гробовщика.',
-                en: 'Chart built {d}. Live YouTube search is in the chat with the Undertaker.' },
+  /* ЖИВОГО ПОИСКА НЕТ ПО ДВУМ РАЗНЫМ ПРИЧИНАМ, И ОДНА ФРАЗА НА ОБЕ ОТПРАВЛЯЛА ЧИНИТЬ НЕ
+     ТО. Живой разбор Ren: аппка писала «поиск идёт в чате», с сервера тот же поиск
+     проходил, и час ушёл на Worker'а - а страница просто не знала его адреса. Теперь
+     причина названа: нет адреса (чинится выкладкой/ссылкой) против нет подписи (плеер
+     открыт мимо Telegram, чинится переоткрытием из бота). */
+  yt_built_c: { ru: 'Чарт собран {d}. Живой поиск по YouTube идёт в чате у Гробовщика: ' +
+                    'сюда не доехал адрес поиска - открой плеер заново кнопкой из чата.',
+                en: 'Chart built {d}. Live YouTube search is in the chat with the ' +
+                    'Undertaker: the search address did not reach this page - reopen the ' +
+                    'player from the chat button.' },
+  yt_built_s: { ru: 'Чарт собран {d}. Живой поиск по YouTube идёт в чате у Гробовщика: ' +
+                    'Telegram не передал подпись, значит плеер открыт мимо него.',
+                en: 'Chart built {d}. Live YouTube search is in the chat with the ' +
+                    'Undertaker: Telegram passed no signature, so the player was opened ' +
+                    'outside it.' },
   /* ОТКАЗЫ ПЛЕЕРА РАЗНЫЕ ПО СМЫСЛУ, И ПУТАТЬ ИХ НЕЛЬЗЯ: «владелец запретил встраивание»
      чинится открытием на ютубе, а «ролика больше нет» не чинится вовсе. */
   yt_e_gone: { ru: 'Ролик удалён или закрыт владельцем.',
@@ -433,6 +446,10 @@ var STR = {
   b_empty_h: { ru: 'Книг не нашлось',           en: 'No books found' },
   b_empty_b: { ru: 'Попробуй другую тему или автора.',
                en: 'Try another topic or author.' },
+  /* ПРИПИСКА К ЛЮБОЙ ДАТЕ СБОРКИ СТАРШЕ СУТОК. Отдельной строкой, а не шестью правками
+     готовых фраз: правило про свежесть одно на все каталоги, и шесть его копий разошлись
+     бы на первой же правке. */
+  snap_old:  { ru: 'Данные могли устареть.', en: 'The data may be out of date.' },
   m_built:   { ru: 'Подборка собрана {d}. Живой поиск по всей библиотеке идёт в чате.',
                en: 'Selection built {d}. Live search over the whole library is in the chat.' },
   b_chapters_1: { ru: 'глава',                  en: 'chapter' },
@@ -1040,9 +1057,16 @@ function render() {
       d = _snap.built ? new Date(_snap.built * 1000).toLocaleDateString(
         LANG === 'ru' ? 'ru-RU' : 'en-GB') : '';
     } catch (e) { d = ''; }
-    var _key = _yt ? (canSearch() ? 'yt_built' : 'yt_built_c')
+    var _key = _yt ? (canSearch() ? 'yt_built'
+                                  : (searchOff() === 'nosign' ? 'yt_built_s' : 'yt_built_c'))
                    : (state.mode === 'music' ? 'm_built' : 'p_built');
     hint.textContent = d ? t(_key).replace('{d}', d) : '';
+    /* СВЕЖЕСТЬ НАЗЫВАЕТСЯ ЧЕСТНО. «Собран 03.08» человек читает как «данные сегодняшние»,
+       и был прав ровно до того дня, когда снимок перестал собираться. Дата сама по себе
+       правду не говорит - её надо сравнить с сегодняшним днём, и это делаем мы, а не он. */
+    if (hint.textContent && _snap.built && (Date.now() / 1000 - _snap.built) > 86400) {
+      hint.textContent += ' ' + t('snap_old');
+    }
   }
   if (hint.textContent) elList.appendChild(hint);
 }
@@ -1948,7 +1972,7 @@ elQ.addEventListener('input', function () {
    и перезагружаемся ОДИН раз при расхождении.
    Защита от цикла обязательна: если version.txt почему-то всегда отличается (не доложили
    при деплое, отдаётся не тот файл), без флага страница перезагружалась бы вечно. */
-var VERSION = 'fc7d6d92d73a';
+var VERSION = '0a676d06525c';
 /* ИМЯ БОТА ПРИХОДИТ ПАРАМЕТРОМ ССЫЛКИ, а зашитое при выкладке - только фолбэк.
    ПОЧЕМУ ТАК. Страница ОДНА на всех ботов, а деплоить её могут и с прода, и со стенда.
    Зашитое при сборке имя означает: выложил со стенда - у всех на проде кнопки ведут в
@@ -1967,10 +1991,23 @@ var API_BASE = (function () {
   return baked.indexOf('{{') === 0 ? '' : baked.replace(/\/+$/, '');
 })();
 
+function searchOff() {
+  /* ЧЕГО ИМЕННО НЕ ХВАТАЕТ ДЛЯ ЖИВОГО ПОИСКА. -> '' | 'noapi' | 'nosign'.
+     ДВЕ ПРИЧИНЫ - ДВА ДЕЙСТВИЯ, и сводить их в один bool значило отправлять человека (и
+     себя) чинить не то: «адреса нет» лечится выкладкой или переоткрытием по свежей
+     ссылке, «подписи нет» - открытием плеера из Telegram. Живой разбор Ren начался с
+     одной фразы «поиск идёт в чате» и час шёл в сторону Worker'а, который был исправен. */
+  try {
+    if (!API_BASE) return 'noapi';
+    if (!(TG && TG.initData)) return 'nosign';
+    return '';
+  } catch (e) { return 'nosign'; }
+}
+
 function canSearch() {
   /* Нужны ОБА: адрес и подпись Telegram. Без подписи эндпоинт откажет - и правильно
      сделает, иначе он публичный прокси к нашей квоте. */
-  try { return !!(API_BASE && TG && TG.initData); } catch (e) { return false; }
+  return !searchOff();
 }
 
 var BOT = (function () {
