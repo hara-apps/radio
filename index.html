@@ -481,6 +481,18 @@ var STR = {
                       'next time you open it.' },
   r_nolink:  { ru: 'Этот Telegram не умеет открывать ссылки из аппки.',
                en: 'This Telegram cannot open links from a Mini App.' },
+  /* ПОЧЕМУ СВЯЗИ НЕТ - ЭТО ДВА РАЗНЫХ ДИАГНОЗА, И ПОЛДНЯ УШЛО ИМЕННО НА ЭТО (прод, Ren).
+     Одна фраза «Связи с ботом нет» стояла и там, где страница НЕ ЗНАЕТ адреса эндпоинта
+     (тогда она не делает НИ ОДНОГО запроса - в логе бота после тапа пусто, и разбор
+     уходит искать обрыв между браузером и Worker'ом, которого нет), и там, где адрес есть,
+     а подписи нет. Приписка коротка нарочно: её читают на экране телефона, а не в логе. */
+  r_why_api:  { ru: ' Причина: в страницу не доехал адрес эндпоинта - открой плеер заново ' +
+                    'кнопкой из чата.',
+                en: ' Reason: the endpoint address never reached this page - reopen the ' +
+                    'player from the chat button.' },
+  r_why_sign: { ru: ' Причина: Telegram не передал подпись - похоже, плеер открыт мимо него.',
+                en: ' Reason: Telegram passed no signature - the player seems to be open ' +
+                    'outside it.' },
   /* ПОДПИСИ ПРИ ЖИВОМ ЯЩИКЕ ГОВОРЯТ ДРУГОЕ, потому что и поведение другое: ни одна кнопка
      больше не уводит, а в чат уезжает только то, что физически не может приехать сюда. */
   a_hint_live: { ru: 'Отвечаю прямо здесь: 👍 в эфире - и я скажу, что играет. Музыка не ' +
@@ -1467,13 +1479,42 @@ function canSignal() {
 }
 
 function sigPost(kind, body) {
+  /* НЕУДАЧА НЕСЁТ ФАКТЫ, А НЕ НАСТРОЕНИЕ (требование Ren по живому разбору). Раньше любой
+     провал сети схлопывался в одну фразу, и разбор упирался в неё: непонятно даже, дошёл
+     ли запрос. Теперь наружу отдаётся КУДА шли, ЧЕМ ответили и ЧТО сказали - три вещи,
+     которых хватает, чтобы отличить «нас блокирует CORS» от «Worker вернул отказ». */
   var b = body || {};
   b.kind = kind;
   return fetch(API_BASE + '/signal', {
     method: 'POST',
     headers: { 'X-Init-Data': (TG && TG.initData) || '', 'Content-Type': 'application/json' },
     body: JSON.stringify(b)
-  }).then(function (r) { return r.json(); });
+  }).then(function (r) {
+    return r.json().catch(function () { return {}; }).then(function (j) {
+      j = j || {};
+      if (!r.ok && !j.error) { j.error = 'http' + r.status; }
+      j.__http = r.status;
+      return j;
+    });
+  }).catch(function (e) {
+    /* СЮДА ПРИХОДИТ И CORS: браузер не даёт прочитать ни код, ни тело, и TypeError -
+       единственный признак. Поэтому он НАЗЫВАЕТСЯ отдельно, а не растворяется в «не
+       дозвонился»: у блокировки браузером и у мёртвой сети разные лечения. */
+    return { error: 'net', __net: String((e && e.message) || e).slice(0, 60) };
+  });
+}
+
+function relayFail(j) {
+  /* ЧТО ПОКАЗАТЬ ЧЕЛОВЕКУ, КОГДА СИГНАЛ НЕ УШЁЛ. Короткая строка + факты хвостом: имя
+     хоста (а не весь адрес - он длинный и на экране бесполезен), код ответа, слово
+     ошибки. Известные причины по-прежнему разбираются реестром YT_ERR. */
+  var k = YT_ERR[(j || {}).error];
+  if (k) return t(k[1]);
+  var host = '';
+  try { host = new URL(API_BASE).host; } catch (e) { host = API_BASE || '?'; }
+  var tail = ' [' + host + (j && j.__http ? ' ' + j.__http : '')
+           + (j && j.__net ? ' ' + j.__net : '') + ']';
+  return t('r_fail') + tail;
 }
 
 function sigPoll(id, n, done, fail) {
@@ -1512,14 +1553,13 @@ function relay(kind, body, waitKey) {
          подпись чинится переоткрытием, несошедшаяся - не чинится вовсе, а «нет initData»
          значит, что плеер открыт мимо Telegram. Одна фраза на все случаи отправляла бы
          человека чинить не то. */
-      var k = YT_ERR[(j || {}).error];
-      note(k ? t(k[1]) : t('r_fail'));
+      note(relayFail(j));
       return;
     }
     sigPoll(j.id, 0, function (res) { showRes(res, kind); }, function (why) {
       note(t(why === 'gone' ? 'r_gone' : 'r_slow'));
     });
-  }).catch(function () { note(t('r_fail')); });
+  }).catch(function (e) { note(relayFail({ error: 'net', __net: String((e && e.message) || e).slice(0, 60) })); });
   return true;
 }
 
@@ -1717,7 +1757,7 @@ function paintActs(it, keep) {
       /* ⭐ - ЕДИНСТВЕННАЯ КНОПКА, КОТОРАЯ ЛАЙКАЕТ СТАНЦИЮ. Без ящика она остаётся
          локальной: избранное переживёт, а бот подхватит его при следующем открытии. */
       if (!relay('star', { ty: r.ty, ref: refFor(r), nm: r.nm }, 'r_star')) {
-        note(t('r_nobox_star'));
+        note(t('r_nobox_star') + whyOff());
       }
     });
     /* 👍/👎 В ЭФИРЕ - ПРО ТРЕК, и смысл у них портится со временем: к отправке «трёх
@@ -1738,7 +1778,7 @@ function paintActs(it, keep) {
              бессмысленно: у 👍 смысл ТРЕКОВЫЙ, а к моменту, когда связь появится, в эфире
              играет другое - мы запомнили бы не ту песню (закон №38). */
           if (!relay(i ? 'dislike' : 'like', { ty: r.ty, ref: refFor(r) }, 'r_id')) {
-            note(t('r_nobox'));
+            note(t('r_nobox') + whyOff());
           }
         });
       });
@@ -1748,7 +1788,7 @@ function paintActs(it, keep) {
     var n1 = document.createElement('div');
     n1.className = 'anote';
     n1.textContent = ((it && it.yt) ? t('a_hint_y')
-                      : (canSignal() ? t('a_hint_live') : t('a_hint_off')));
+                      : (canSignal() ? t('a_hint_live') : t('a_hint_off') + whyOff()));
     box.appendChild(n1);
   }
   /* ВТОРАЯ ГРУППА - «ПОПРОСИТЬ БОТА». НИ ОДНА ЕЁ КНОПКА НЕ УВОДИТ ИЗ ПЛЕЕРА. В чат
@@ -1780,7 +1820,7 @@ function paintActs(it, keep) {
       /* НАСТРОЕНИЕ СПРАШИВАЕТСЯ ЗДЕСЬ И ПОДБОРКА ИГРАЕТ ЗДЕСЬ. Ради одного слова уводить
          человека в чат - ровно тот уход, который мы и убирали. */
       if (canSignal()) { djAsk(); return; }
-      note(t('r_nobox'));
+      note(t('r_nobox') + whyOff());
     });
     mkBtn(rowB, '🎵', 'a_mine', false, function () { relay('mine', {}, 'r_mine_w'); });
     if (!solo) { box.appendChild(rowB); }
@@ -1788,7 +1828,7 @@ function paintActs(it, keep) {
       // у ролика вторая группа это один ряд, и объяснять там нечего - строка выше сказала
       var n2 = document.createElement('div');
       n2.className = 'anote';
-      n2.textContent = t(box2 ? 'a_hint_box' : 'a_hint_off2');
+      n2.textContent = t(box2 ? 'a_hint_box' : 'a_hint_off2') + (box2 ? '' : whyOff());
       box.appendChild(n2);
     }
   }
@@ -1972,7 +2012,7 @@ elQ.addEventListener('input', function () {
    и перезагружаемся ОДИН раз при расхождении.
    Защита от цикла обязательна: если version.txt почему-то всегда отличается (не доложили
    при деплое, отдаётся не тот файл), без флага страница перезагружалась бы вечно. */
-var VERSION = '0a676d06525c';
+var VERSION = '71d3431d4fea';
 /* ИМЯ БОТА ПРИХОДИТ ПАРАМЕТРОМ ССЫЛКИ, а зашитое при выкладке - только фолбэк.
    ПОЧЕМУ ТАК. Страница ОДНА на всех ботов, а деплоить её могут и с прода, и со стенда.
    Зашитое при сборке имя означает: выложил со стенда - у всех на проде кнопки ведут в
@@ -2008,6 +2048,19 @@ function canSearch() {
   /* Нужны ОБА: адрес и подпись Telegram. Без подписи эндпоинт откажет - и правильно
      сделает, иначе он публичный прокси к нашей квоте. */
   return !searchOff();
+}
+
+function whyOff() {
+  /* ПРИПИСКА «ПОЧЕМУ» К ЛЮБОМУ «связи с ботом нет». -> '' , когда связь есть.
+
+     ЖИВОЙ СЛУЧАЙ, СТОИВШИЙ ПОЛДНЯ (прод, Ren): человек видел «Связи с ботом нет», в логе
+     бота после тапа НЕ ПОЯВЛЯЛОСЬ НИ ОДНОЙ строки, и разбор пошёл искать обрыв между
+     браузером и Worker'ом. Обрыва не было: страница НЕ ЗНАЛА адреса эндпоинта и поэтому
+     не делала НИ ОДНОГО запроса - молчание в логе было не симптомом сети, а прямым
+     следствием этой ветки. Одна фраза на два разных диагноза увела разбор не туда, и
+     потому причина теперь дописывается к самой фразе. */
+  var w = searchOff();
+  return w ? t(w === 'nosign' ? 'r_why_sign' : 'r_why_api') : '';
 }
 
 var BOT = (function () {
